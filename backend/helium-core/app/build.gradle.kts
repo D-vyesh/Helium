@@ -1,0 +1,34 @@
+plugins {
+    id("org.springframework.boot")
+    id("io.spring.dependency-management")
+}
+
+dependencies {
+    implementation(project(":modules:auth-user"))
+    implementation(project(":modules:compliance-lite"))
+    implementation(project(":modules:wallet"))
+    implementation(project(":modules:ledger"))
+    implementation(project(":modules:trading"))
+    implementation(project(":modules:matching"))
+    implementation(project(":modules:market-data"))
+    implementation(project(":modules:admin"))
+    implementation(project(":modules:audit"))
+    implementation(project(":modules:outbox"))
+
+    implementation(project(":shared:common"))
+    implementation(project(":shared:security"))
+    implementation(project(":shared:persistence"))
+    implementation(project(":shared:observability"))
+
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.springframework.boot:spring-boot-starter-jdbc")
+    implementation("org.springframework.boot:spring-boot-starter-validation")
+    implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.flywaydb:flyway-core")
+    implementation("org.flywaydb:flyway-database-postgresql")
+
+    runtimeOnly("org.postgresql:postgresql")
+
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation(project(":shared:test-support"))
+}

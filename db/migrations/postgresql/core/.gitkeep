@@ -1,0 +1,2 @@
+# Canonical database migration planning folder. Runtime Flyway migrations live in backend/helium-core/app/src/main/resources/db/migration.
+
