@@ -14,6 +14,13 @@ allprojects {
 
 subprojects {
     apply(plugin = "java")
+    apply(plugin = "io.spring.dependency-management")
+
+    configure<io.spring.gradle.dependencymanagement.dsl.DependencyManagementExtension> {
+        imports {
+            mavenBom("org.springframework.boot:spring-boot-dependencies:3.5.15")
+        }
+    }
 
     java {
         toolchain {
@@ -26,8 +33,7 @@ subprojects {
     }
 
     dependencies {
-        add("testImplementation", platform("org.junit:junit-bom:5.11.4"))
         add("testImplementation", "org.junit.jupiter:junit-jupiter")
+        add("testRuntimeOnly", "org.junit.platform:junit-platform-launcher")
     }
 }
-
