@@ -66,7 +66,7 @@ create table auth_role_grants (
     granted_at timestamptz not null,
     revoked_by uuid references auth_user_accounts(id),
     revoked_at timestamptz,
-    constraint ck_auth_role_grants_role check (role in ('USER', 'ADMIN', 'SUPPORT', 'COMPLIANCE', 'AUDITOR')),
+    constraint ck_auth_role_grants_role check (role in ('USER', 'ADMIN', 'FINANCE_OPS', 'SUPPORT', 'COMPLIANCE', 'AUDITOR')),
     constraint ck_auth_role_grants_revocation check (
         (revoked_at is null and revoked_by is null)
         or (revoked_at is not null and revoked_by is not null)
