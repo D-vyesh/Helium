@@ -20,6 +20,7 @@ import java.math.RoundingMode;
 import java.time.Clock;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -60,7 +61,7 @@ class SettlementCoordinator implements TradingSettlementPort {
     }
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void processExecution(TradeExecutionCommand command) {
         matchingActorProvider.requireMatchingEngine();
         String actorId = matchingActorProvider.matchingActorId();
@@ -68,7 +69,9 @@ class SettlementCoordinator implements TradingSettlementPort {
 
         String executionHash = TradingHash.executionHash(
             command.executionId(),
-            command.matchingOffset(),
+            command.marketSequence(),
+            command.buyerOrderOffset(),
+            command.sellerOrderOffset(),
             command.buyerOrderId(),
             command.sellerOrderId(),
             command.marketSymbol(),
@@ -90,6 +93,7 @@ class SettlementCoordinator implements TradingSettlementPort {
         Order seller = orders.seller();
 
         validateExecution(command, buyer, seller);
+        validateLimitPrices(command, buyer, seller);
 
         Market market = marketRepository.findById(buyer.marketSymbol())
             .orElseThrow(() -> new TradingValidationException("market not found"));
@@ -107,8 +111,8 @@ class SettlementCoordinator implements TradingSettlementPort {
         validateReservationCapacity(buyer, buyerReserveConsumedAmount);
         validateReservationCapacity(seller, sellerReserveConsumedAmount);
 
-        buyer.applyFill(command.quantity(), command.matchingOffset(), clock.instant());
-        seller.applyFill(command.quantity(), command.matchingOffset(), clock.instant());
+        buyer.applyFill(command.quantity(), command.buyerOrderOffset(), clock.instant());
+        seller.applyFill(command.quantity(), command.sellerOrderOffset(), clock.instant());
         orderRepository.save(buyer);
         orderRepository.save(seller);
 
@@ -134,7 +138,7 @@ class SettlementCoordinator implements TradingSettlementPort {
         TradeSettlementInstruction instruction = TradeSettlementInstruction.pending(
             command.executionId(),
             executionHash,
-            command.matchingOffset(),
+            command.marketSequence(),
             buyer.id(),
             seller.id(),
             buyer.marketSymbol(),
@@ -193,6 +197,15 @@ class SettlementCoordinator implements TradingSettlementPort {
         Market.requirePositive(command.price(), "price");
         Market.requireNonNegative(command.buyerFee(), "buyerFee");
         Market.requireNonNegative(command.sellerFee(), "sellerFee");
+    }
+
+    private static void validateLimitPrices(TradeExecutionCommand command, Order buyer, Order seller) {
+        if (buyer.limitPrice() == null || command.price().compareTo(buyer.limitPrice()) > 0) {
+            throw new TradingValidationException("execution price exceeds buyer limit price");
+        }
+        if (seller.limitPrice() == null || command.price().compareTo(seller.limitPrice()) < 0) {
+            throw new TradingValidationException("execution price is below seller limit price");
+        }
     }
 
     private static BigDecimal expectedFee(Order order, BigDecimal quantity, BigDecimal price, Market market) {

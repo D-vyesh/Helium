@@ -314,6 +314,8 @@ class TradingPostgresIntegrationTest {
         assertThatThrownBy(() -> tradingSettlementPort.processExecution(new TradingSettlementPort.TradeExecutionCommand(
             "exec-market-mismatch",
             2,
+            2,
+            2,
             pair.buyerOrderId(),
             pair.sellerOrderId(),
             "ETH-USD",
@@ -355,8 +357,8 @@ class TradingPostgresIntegrationTest {
 
         authenticateMatching();
         assertThatThrownBy(() -> tradingSettlementPort.processExecution(execution("exec-negative", 2, pair, "1.0", "101.00", "0.00", "0.00")))
-            .isInstanceOf(TradingInvariantViolationException.class)
-            .hasMessageContaining("Consumed amount exceeds reservation");
+            .isInstanceOf(TradingValidationException.class)
+            .hasMessageContaining("execution price exceeds buyer limit price");
 
         assertThat(orderRepository.findById(pair.buyerOrderId()).orElseThrow().status()).isEqualTo(OrderStatus.OPEN);
         assertThat(settlementRepository.count()).isZero();
@@ -496,6 +498,8 @@ class TradingPostgresIntegrationTest {
     ) {
         return new TradingSettlementPort.TradeExecutionCommand(
             executionId,
+            matchingOffset,
+            matchingOffset,
             matchingOffset,
             pair.buyerOrderId(),
             pair.sellerOrderId(),

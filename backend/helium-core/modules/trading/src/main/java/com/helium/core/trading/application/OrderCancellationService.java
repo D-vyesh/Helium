@@ -2,6 +2,7 @@ package com.helium.core.trading.application;
 
 import com.helium.core.ledger.application.FundsReservationPort;
 import com.helium.core.matching.application.MatchingCommandPort;
+import com.helium.core.matching.application.TrustedTradingActorIssuer;
 import com.helium.core.trading.domain.Order;
 import com.helium.core.trading.domain.TradingValidationException;
 import com.helium.core.trading.infrastructure.OrderRepository;
@@ -10,6 +11,9 @@ import com.helium.core.trading.infrastructure.TradingSecurityContext;
 import java.time.Clock;
 import java.util.UUID;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +23,8 @@ class OrderCancellationService implements OrderCancellationPort {
     private final OrderReservationRepository reservationRepository;
     private final FundsReservationPort fundsReservationPort;
     private final ObjectProvider<MatchingCommandPort> matchingCommandPortProvider;
+    private final TrustedTradingActorIssuer tradingActorIssuer;
+    private final String tradingPermission;
     private final TradingAuditPublisher auditPublisher;
     private final TradingSecurityContext securityContext;
     private final Clock clock;
@@ -28,6 +34,8 @@ class OrderCancellationService implements OrderCancellationPort {
         OrderReservationRepository reservationRepository,
         FundsReservationPort fundsReservationPort,
         ObjectProvider<MatchingCommandPort> matchingCommandPortProvider,
+        TrustedTradingActorIssuer tradingActorIssuer,
+        @Value("${helium.trading.actor-permission:local-dev-trading-permission}") String tradingPermission,
         TradingAuditPublisher auditPublisher,
         TradingSecurityContext securityContext,
         Clock clock
@@ -36,6 +44,8 @@ class OrderCancellationService implements OrderCancellationPort {
         this.reservationRepository = reservationRepository;
         this.fundsReservationPort = fundsReservationPort;
         this.matchingCommandPortProvider = matchingCommandPortProvider;
+        this.tradingActorIssuer = tradingActorIssuer;
+        this.tradingPermission = tradingPermission;
         this.auditPublisher = auditPublisher;
         this.securityContext = securityContext;
         this.clock = clock;
@@ -59,10 +69,20 @@ class OrderCancellationService implements OrderCancellationPort {
 
         MatchingCommandPort matchingCommandPort = matchingCommandPortProvider.getIfAvailable();
         if (matchingCommandPort != null) {
-            matchingCommandPort.cancelOrder(new MatchingCommandPort.CancelOrderCommand(
+            withTradingActor(() -> matchingCommandPort.cancelOrder(new MatchingCommandPort.CancelOrderCommand(
                 order.id(),
                 order.marketSymbol()
-            ));
+            )));
+        }
+    }
+
+    private void withTradingActor(Runnable operation) {
+        Authentication previous = SecurityContextHolder.getContext().getAuthentication();
+        try {
+            SecurityContextHolder.getContext().setAuthentication(tradingActorIssuer.issueTradingActor(tradingPermission));
+            operation.run();
+        } finally {
+            SecurityContextHolder.getContext().setAuthentication(previous);
         }
     }
 }

@@ -36,7 +36,9 @@ final class TradingHash {
 
     static String executionHash(
         String executionId,
-        long matchingOffset,
+        long marketSequence,
+        long buyerOrderOffset,
+        long sellerOrderOffset,
         UUID buyerOrderId,
         UUID sellerOrderId,
         String market,
@@ -47,7 +49,9 @@ final class TradingHash {
     ) {
         return hash(
             part(executionId)
-                + part(Long.toString(matchingOffset))
+                + part(Long.toString(marketSequence))
+                + part(Long.toString(buyerOrderOffset))
+                + part(Long.toString(sellerOrderOffset))
                 + part(buyerOrderId.toString())
                 + part(sellerOrderId.toString())
                 + part(market.toUpperCase())

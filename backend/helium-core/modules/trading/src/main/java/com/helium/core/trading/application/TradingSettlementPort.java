@@ -8,7 +8,9 @@ public interface TradingSettlementPort {
 
     record TradeExecutionCommand(
         String executionId,
-        long matchingOffset,
+        long marketSequence,
+        long buyerOrderOffset,
+        long sellerOrderOffset,
         UUID buyerOrderId,
         UUID sellerOrderId,
         String marketSymbol,

@@ -1,0 +1,15 @@
+export const queryKeys = {
+  session: ["session"] as const,
+  balances: ["wallet", "balances"] as const,
+  depositAddresses: ["wallet", "deposit-addresses"] as const,
+  deposits: ["wallet", "deposits"] as const,
+  withdrawals: ["wallet", "withdrawals"] as const,
+  markets: ["markets"] as const,
+  orderBook: (symbol: string) => ["market-data", "book", symbol] as const,
+  publicTrades: (symbol: string) => ["market-data", "trades", symbol] as const,
+  candles: (symbol: string) => ["market-data", "candles", symbol] as const,
+  orders: ["trading", "orders"] as const,
+  trades: ["trading", "trades"] as const,
+  position: (symbol: string) => ["trading", "position", symbol] as const,
+  settings: ["settings"] as const
+};

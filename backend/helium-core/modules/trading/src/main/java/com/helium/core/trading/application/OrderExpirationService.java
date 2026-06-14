@@ -7,6 +7,7 @@ import com.helium.core.trading.infrastructure.OrderRepository;
 import java.time.Clock;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -31,7 +32,7 @@ public class OrderExpirationService {
         this.clock = clock;
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void expireOrder(UUID orderId, long matchingOffset) {
         matchingActorProvider.requireMatchingEngine();
         String actorId = matchingActorProvider.matchingActorId();

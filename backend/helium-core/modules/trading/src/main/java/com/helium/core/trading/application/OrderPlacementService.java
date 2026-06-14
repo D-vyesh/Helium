@@ -5,6 +5,7 @@ import com.helium.core.ledger.application.FundsReservationPort;
 import com.helium.core.ledger.application.FundsReservationResult;
 import com.helium.core.ledger.application.ReserveFundsCommand;
 import com.helium.core.matching.application.MatchingCommandPort;
+import com.helium.core.matching.application.TrustedTradingActorIssuer;
 import com.helium.core.trading.domain.Market;
 import com.helium.core.trading.domain.Order;
 import com.helium.core.trading.domain.OrderReservation;
@@ -20,6 +21,9 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.util.UUID;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,6 +35,8 @@ class OrderPlacementService implements OrderPlacementPort {
     private final AccountStatusPort accountStatusPort;
     private final FundsReservationPort fundsReservationPort;
     private final ObjectProvider<MatchingCommandPort> matchingCommandPortProvider;
+    private final TrustedTradingActorIssuer tradingActorIssuer;
+    private final String tradingPermission;
     private final FeeService feeService;
     private final TradingAuditPublisher auditPublisher;
     private final TradingSecurityContext securityContext;
@@ -44,6 +50,8 @@ class OrderPlacementService implements OrderPlacementPort {
         AccountStatusPort accountStatusPort,
         FundsReservationPort fundsReservationPort,
         ObjectProvider<MatchingCommandPort> matchingCommandPortProvider,
+        TrustedTradingActorIssuer tradingActorIssuer,
+        @Value("${helium.trading.actor-permission:local-dev-trading-permission}") String tradingPermission,
         FeeService feeService,
         TradingAuditPublisher auditPublisher,
         TradingSecurityContext securityContext,
@@ -56,6 +64,8 @@ class OrderPlacementService implements OrderPlacementPort {
         this.accountStatusPort = accountStatusPort;
         this.fundsReservationPort = fundsReservationPort;
         this.matchingCommandPortProvider = matchingCommandPortProvider;
+        this.tradingActorIssuer = tradingActorIssuer;
+        this.tradingPermission = tradingPermission;
         this.feeService = feeService;
         this.auditPublisher = auditPublisher;
         this.securityContext = securityContext;
@@ -160,7 +170,7 @@ class OrderPlacementService implements OrderPlacementPort {
 
         MatchingCommandPort matchingCommandPort = matchingCommandPortProvider.getIfAvailable();
         if (matchingCommandPort != null) {
-            matchingCommandPort.submitOrder(new MatchingCommandPort.SubmitOrderCommand(
+            withTradingActor(() -> matchingCommandPort.submitOrder(new MatchingCommandPort.SubmitOrderCommand(
                 order.id(),
                 order.marketSymbol(),
                 order.side().name(),
@@ -168,9 +178,19 @@ class OrderPlacementService implements OrderPlacementPort {
                 order.timeInForce().name(),
                 order.quantity(),
                 order.limitPrice()
-            ));
+            )));
         }
 
         return order.id();
+    }
+
+    private void withTradingActor(Runnable operation) {
+        Authentication previous = SecurityContextHolder.getContext().getAuthentication();
+        try {
+            SecurityContextHolder.getContext().setAuthentication(tradingActorIssuer.issueTradingActor(tradingPermission));
+            operation.run();
+        } finally {
+            SecurityContextHolder.getContext().setAuthentication(previous);
+        }
     }
 }

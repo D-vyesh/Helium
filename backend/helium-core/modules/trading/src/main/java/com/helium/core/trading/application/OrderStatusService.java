@@ -7,6 +7,7 @@ import com.helium.core.trading.infrastructure.OrderRepository;
 import java.time.Clock;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -31,7 +32,7 @@ public class OrderStatusService {
         this.clock = clock;
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markAccepted(UUID orderId, long matchingOffset) {
         matchingActorProvider.requireMatchingEngine();
         String actorId = matchingActorProvider.matchingActorId();
@@ -44,7 +45,7 @@ public class OrderStatusService {
         auditPublisher.publish(order.id(), order.status(), actorId, "Order accepted by matching");
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markCancelled(UUID orderId, long matchingOffset) {
         matchingActorProvider.requireMatchingEngine();
         String actorId = matchingActorProvider.matchingActorId();
@@ -63,7 +64,7 @@ public class OrderStatusService {
         auditPublisher.publish(order.id(), order.status(), actorId, "Order cancelled");
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markRejected(UUID orderId, String reason, long matchingOffset) {
         matchingActorProvider.requireMatchingEngine();
         String actorId = matchingActorProvider.matchingActorId();
