@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: helium-backend
+  namespace: helium
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: helium-backend
+  template:
+    metadata:
+      labels:
+        app: helium-backend
+    spec:
+      containers:
+        - name: backend
+          image: ghcr.io/your-org/helium-backend:latest
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - secretRef:
+                name: helium-backend-secrets
+            - configMapRef:
+                name: helium-backend-config
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: helium-backend
+  namespace: helium
+spec:
+  selector:
+    app: helium-backend
+  ports:
+    - port: 8080
+      targetPort: 8080

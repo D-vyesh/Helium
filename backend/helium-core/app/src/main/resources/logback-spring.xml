@@ -1,0 +1,25 @@
+<configuration>
+    <springProperty scope="context" name="appName" source="spring.application.name" defaultValue="helium-core"/>
+    <springProperty scope="context" name="environment" source="helium.environment" defaultValue="local"/>
+
+    <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+            <providers>
+                <timestamp/>
+                <logLevel/>
+                <loggerName/>
+                <threadName/>
+                <message/>
+                <mdc/>
+                <stackTrace/>
+                <pattern>
+                    <pattern>{"application":"${appName}","environment":"${environment}"}</pattern>
+                </pattern>
+            </providers>
+        </encoder>
+    </appender>
+
+    <root level="${HELIUM_LOG_LEVEL:-INFO}">
+        <appender-ref ref="JSON"/>
+    </root>
+</configuration>

@@ -1,4 +1,7 @@
 import type {
+  AdminAuditRecord,
+  AdminMarketControl,
+  AdminUserRecord,
   AssetBalance,
   CandlePoint,
   DepositAddress,
@@ -8,6 +11,8 @@ import type {
   OrderRecord,
   PositionSummary,
   PublicTrade,
+  ReconciliationDiscrepancy,
+  ReconciliationReport,
   SessionUser,
   SettingsProfile,
   TradeRecord,
@@ -98,3 +103,30 @@ export const settingsProfile: SettingsProfile = {
   mfaEnabled: false,
   accountStatus: "ACTIVE"
 };
+
+export const adminUsers: AdminUserRecord[] = [
+  { id: "user-1", email: "founder@helium.exchange", displayName: "Founder", status: "ACTIVE", roles: ["ADMIN", "FINANCE_OPS"], createdAt: "2026-06-01T09:00:00Z" },
+  { id: "user-2", email: "ops@helium.exchange", displayName: "Finance Ops", status: "ACTIVE", roles: ["FINANCE_OPS"], createdAt: "2026-06-05T12:00:00Z" },
+  { id: "user-3", email: "review@helium.exchange", displayName: "Compliance Review", status: "LOCKED", roles: ["COMPLIANCE"], createdAt: "2026-06-07T16:30:00Z" }
+];
+
+export const adminAuditRecords: AdminAuditRecord[] = [
+  { id: "audit-1", action: "WITHDRAWAL_APPROVED", actorId: "user-2", target: "wd-2", details: "Manual approval for closed beta withdrawal", occurredAt: "2026-06-14T10:15:00Z" },
+  { id: "audit-2", action: "RECONCILIATION_REPORT_CREATED", actorId: "user-1", target: "BTC:BITCOIN", details: "Ledger vs wallet report created", occurredAt: "2026-06-14T09:00:00Z" }
+];
+
+export const adminMarketControls: AdminMarketControl[] = [
+  { symbol: "BTC-USD", enabled: true, halted: false, makerFeeRate: "0.0010", takerFeeRate: "0.0020" },
+  { symbol: "ETH-USD", enabled: true, halted: false, makerFeeRate: "0.0010", takerFeeRate: "0.0020" },
+  { symbol: "SOL-USD", enabled: false, halted: true, makerFeeRate: "0.0015", takerFeeRate: "0.0025" }
+];
+
+export const reconciliationReports: ReconciliationReport[] = [
+  { id: "rec-1", type: "LEDGER_WALLET", status: "CLEAN", scope: "BTC:BITCOIN", leftLabel: "ledger_external", rightLabel: "wallet_posted", leftTotal: "12.84210000", rightTotal: "12.84210000", difference: "0", createdAt: "2026-06-14T09:00:00Z" },
+  { id: "rec-2", type: "WALLET_CHAIN", status: "DISCREPANCY", scope: "ETH:ETHEREUM", leftLabel: "wallet_posted", rightLabel: "chain_confirmed", leftTotal: "421.00000000", rightTotal: "420.75000000", difference: "0.25000000", createdAt: "2026-06-14T09:01:00Z" },
+  { id: "rec-3", type: "MATCHING_EXECUTION", status: "CLEAN", scope: "BTC-USD", leftLabel: "matching_executions", rightLabel: "trading_settlements", leftTotal: "142", rightTotal: "142", difference: "0", createdAt: "2026-06-14T09:02:00Z" }
+];
+
+export const reconciliationDiscrepancies: ReconciliationDiscrepancy[] = [
+  { id: "disc-1", reportId: "rec-2", severity: "MEDIUM", scope: "ETH:ETHEREUM", details: "Wallet posted total differs from confirmed chain total.", difference: "0.25000000", status: "OPEN", detectedAt: "2026-06-14T09:01:00Z" }
+];

@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: helium-frontend
+  namespace: helium
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: helium-frontend
+  template:
+    metadata:
+      labels:
+        app: helium-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: ghcr.io/your-org/helium-frontend:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NEXT_PUBLIC_HELIUM_API_BASE_URL
+              value: https://api.helium.exchange
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: helium-frontend
+  namespace: helium
+spec:
+  selector:
+    app: helium-frontend
+  ports:
+    - port: 3000
+      targetPort: 3000

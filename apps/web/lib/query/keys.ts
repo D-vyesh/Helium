@@ -11,5 +11,10 @@ export const queryKeys = {
   orders: ["trading", "orders"] as const,
   trades: ["trading", "trades"] as const,
   position: (symbol: string) => ["trading", "position", symbol] as const,
-  settings: ["settings"] as const
+  settings: ["settings"] as const,
+  adminUsers: ["admin", "users"] as const,
+  adminAudit: ["admin", "audit"] as const,
+  adminMarketControls: ["admin", "markets"] as const,
+  reconciliationReports: ["admin", "reconciliation", "reports"] as const,
+  reconciliationDiscrepancies: ["admin", "reconciliation", "discrepancies"] as const
 };

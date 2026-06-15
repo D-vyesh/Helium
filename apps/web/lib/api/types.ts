@@ -117,3 +117,53 @@ export type SettingsProfile = {
   mfaEnabled: boolean;
   accountStatus: "ACTIVE" | "LOCKED" | "SUSPENDED" | "CLOSED";
 };
+
+export type AdminUserRecord = {
+  id: string;
+  email: string;
+  displayName: string;
+  status: "ACTIVE" | "LOCKED" | "SUSPENDED" | "CLOSED" | "PENDING_VERIFICATION";
+  roles: UserRole[];
+  createdAt: string;
+};
+
+export type AdminAuditRecord = {
+  id: string;
+  action: string;
+  actorId: string;
+  target: string;
+  details: string;
+  occurredAt: string;
+};
+
+export type AdminMarketControl = {
+  symbol: string;
+  enabled: boolean;
+  halted: boolean;
+  makerFeeRate: string;
+  takerFeeRate: string;
+};
+
+export type ReconciliationReport = {
+  id: string;
+  type: "LEDGER_WALLET" | "WALLET_CHAIN" | "TRADING_SETTLEMENT" | "MATCHING_EXECUTION" | "DAILY_BALANCE";
+  status: "CLEAN" | "DISCREPANCY";
+  scope: string;
+  leftLabel: string;
+  rightLabel: string;
+  leftTotal: string;
+  rightTotal: string;
+  difference: string;
+  createdAt: string;
+};
+
+export type ReconciliationDiscrepancy = {
+  id: string;
+  reportId: string;
+  severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  scope: string;
+  details: string;
+  difference: string;
+  status: "OPEN" | "IN_REVIEW" | "RESOLVED";
+  detectedAt: string;
+};

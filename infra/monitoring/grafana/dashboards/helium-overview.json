@@ -1,0 +1,50 @@
+{
+  "uid": "helium-overview",
+  "title": "HELIUM Overview",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "HTTP Requests",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        { "expr": "sum(rate(http_server_requests_seconds_count{application=\"helium-core\"}[5m]))", "refId": "A" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP p95 Latency",
+      "gridPos": { "x": 6, "y": 0, "w": 9, "h": 7 },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{application=\"helium-core\"}[5m])) by (le, uri, method))", "refId": "A" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "JVM Heap Used",
+      "gridPos": { "x": 15, "y": 0, "w": 9, "h": 7 },
+      "targets": [
+        { "expr": "sum(jvm_memory_used_bytes{application=\"helium-core\", area=\"heap\"})", "refId": "A" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Hikari Active Connections",
+      "gridPos": { "x": 0, "y": 7, "w": 12, "h": 7 },
+      "targets": [
+        { "expr": "hikaricp_connections_active{application=\"helium-core\"}", "refId": "A" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Outbox Backlog",
+      "gridPos": { "x": 12, "y": 7, "w": 12, "h": 7 },
+      "targets": [
+        { "expr": "sum(outbox_events_pending)", "refId": "A" }
+      ]
+    }
+  ]
+}

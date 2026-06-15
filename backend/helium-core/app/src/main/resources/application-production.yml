@@ -1,0 +1,18 @@
+spring:
+  config:
+    activate:
+      on-profile: production
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+management:
+  endpoint:
+    health:
+      show-details: never
+
+helium:
+  environment: production

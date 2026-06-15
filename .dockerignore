@@ -1,0 +1,9 @@
+.git
+.gradle
+node_modules
+apps/web/.next
+backend/helium-core/.gradle
+backend/helium-core/**/build
+backend/helium-core/**/bin
+**/.DS_Store
+**/*.log

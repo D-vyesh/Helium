@@ -114,6 +114,14 @@ public class UserSession {
         return userId;
     }
 
+    public String tokenHash() {
+        return tokenHash;
+    }
+
+    public Instant createdAt() {
+        return createdAt;
+    }
+
     public SessionStatus status() {
         return status;
     }

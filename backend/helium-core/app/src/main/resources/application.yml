@@ -3,17 +3,35 @@ spring:
     name: helium-core
   profiles:
     default: local
+  lifecycle:
+    timeout-per-shutdown-phase: ${HELIUM_SHUTDOWN_TIMEOUT:30s}
   datasource:
     url: ${HELIUM_DB_URL:jdbc:postgresql://localhost:5432/helium}
     username: ${HELIUM_DB_USERNAME:helium}
     password: ${HELIUM_DB_PASSWORD:helium}
+    hikari:
+      maximum-pool-size: ${HELIUM_DB_POOL_SIZE:20}
+      max-lifetime: ${HELIUM_DB_MAX_LIFETIME_MS:1800000}
+  data:
+    redis:
+      host: ${HELIUM_REDIS_HOST:localhost}
+      port: ${HELIUM_REDIS_PORT:6379}
+      password: ${HELIUM_REDIS_PASSWORD:}
+      timeout: ${HELIUM_REDIS_TIMEOUT:2s}
   flyway:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: false
+  threads:
+    virtual:
+      enabled: true
 
 server:
   port: ${HELIUM_HTTP_PORT:8080}
+  shutdown: graceful
+  tomcat:
+    mbeanregistry:
+      enabled: true
 
 management:
   endpoints:
@@ -24,7 +42,21 @@ management:
     health:
       probes:
         enabled: true
+      show-details: when_authorized
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      environment: ${HELIUM_ENVIRONMENT:local}
+  tracing:
+    sampling:
+      probability: ${HELIUM_TRACE_SAMPLING_PROBABILITY:0.10}
 
 helium:
   environment: ${HELIUM_ENVIRONMENT:local}
-
+  api-keys:
+    current-pepper: ${HELIUM_API_KEY_PEPPER:local-development-api-key-pepper-change-me}
+    previous-pepper: ${HELIUM_API_KEY_PREVIOUS_PEPPER:}
+    signature-ttl: ${HELIUM_API_KEY_SIGNATURE_TTL:5m}
+  outbox:
+    enabled: ${HELIUM_OUTBOX_ENABLED:true}
+    poll-interval-ms: ${HELIUM_OUTBOX_POLL_INTERVAL_MS:1000}

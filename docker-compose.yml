@@ -1,0 +1,102 @@
+name: helium-production-lite
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-helium}
+      POSTGRES_USER: ${POSTGRES_USER:-helium}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-helium-change-me}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-helium} -d ${POSTGRES_DB:-helium}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${HELIUM_REDIS_PASSWORD:-helium-redis-change-me}"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${HELIUM_REDIS_PASSWORD:-helium-redis-change-me}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/helium-core/Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-production}
+      HELIUM_ENVIRONMENT: ${HELIUM_ENVIRONMENT:-production}
+      HELIUM_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-helium}
+      HELIUM_DB_USERNAME: ${POSTGRES_USER:-helium}
+      HELIUM_DB_PASSWORD: ${POSTGRES_PASSWORD:-helium-change-me}
+      HELIUM_REDIS_HOST: redis
+      HELIUM_REDIS_PORT: 6379
+      HELIUM_REDIS_PASSWORD: ${HELIUM_REDIS_PASSWORD:-helium-redis-change-me}
+      HELIUM_API_KEY_PEPPER: ${HELIUM_API_KEY_PEPPER:-change-me-before-production}
+      HELIUM_API_KEY_PREVIOUS_PEPPER: ${HELIUM_API_KEY_PREVIOUS_PEPPER:-}
+      HELIUM_LOG_LEVEL: ${HELIUM_LOG_LEVEL:-INFO}
+    ports:
+      - "${HELIUM_HTTP_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep UP"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+    stop_grace_period: 30s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      NEXT_PUBLIC_HELIUM_API_BASE_URL: ${NEXT_PUBLIC_HELIUM_API_BASE_URL:-http://localhost:8080}
+    ports:
+      - "${HELIUM_WEB_PORT:-3000}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    profiles: ["monitoring"]
+    volumes:
+      - ./infra/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    profiles: ["monitoring"]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    volumes:
+      - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres-data:
+  redis-data:

@@ -27,6 +27,7 @@ public class SessionService implements SessionPort {
     private final TrustedActorProvider trustedActorProvider;
     private final TokenCodec tokenCodec;
     private final SecurityAuditService auditService;
+    private final SessionCachePort sessionCachePort;
     private final Clock clock;
 
     public SessionService(
@@ -37,6 +38,7 @@ public class SessionService implements SessionPort {
         TrustedActorProvider trustedActorProvider,
         TokenCodec tokenCodec,
         SecurityAuditService auditService,
+        SessionCachePort sessionCachePort,
         Clock clock
     ) {
         this.sessionRepository = sessionRepository;
@@ -46,6 +48,7 @@ public class SessionService implements SessionPort {
         this.trustedActorProvider = trustedActorProvider;
         this.tokenCodec = tokenCodec;
         this.auditService = auditService;
+        this.sessionCachePort = sessionCachePort;
         this.clock = clock;
     }
 
@@ -53,6 +56,12 @@ public class SessionService implements SessionPort {
     @Transactional
     public Optional<SessionView> validate(String rawToken) {
         String tokenHash = tokenCodec.hash(rawToken);
+        Optional<SessionView> cached = sessionCachePort.find(tokenHash)
+            .filter(session -> session.expiresAt().isAfter(clock.instant()))
+            .filter(session -> !sessionCachePort.isUserRevokedAfter(session.userId(), session.createdAt()));
+        if (cached.isPresent()) {
+            return cached;
+        }
         Optional<UserSession> readSession = sessionRepository.findReadByTokenHash(tokenHash);
         if (readSession.isEmpty()) {
             return Optional.empty();
@@ -74,7 +83,9 @@ public class SessionService implements SessionPort {
         Set<Role> roles = roleGrantRepository.findAllByUserIdAndRevokedAtIsNull(session.userId()).stream()
             .map(grant -> grant.role())
             .collect(Collectors.toUnmodifiableSet());
-        return Optional.of(new SessionView(session.id(), session.userId(), session.expiresAt(), roles));
+        SessionView view = new SessionView(session.id(), session.userId(), session.createdAt(), session.expiresAt(), roles);
+        sessionCachePort.store(tokenHash, view);
+        return Optional.of(view);
     }
 
     @Override
@@ -82,6 +93,7 @@ public class SessionService implements SessionPort {
     public void logout(String rawToken, SecurityContextData securityContext) {
         sessionRepository.findByTokenHash(tokenCodec.hash(rawToken)).ifPresent(session -> {
             session.revoke("logout", clock.instant());
+            sessionCachePort.evict(session.tokenHash());
             auditService.record(SecurityAuditEventType.LOGOUT, session.userId(), session.id(), securityContext, "session logged out");
         });
     }
@@ -103,7 +115,9 @@ public class SessionService implements SessionPort {
         Instant now = clock.instant();
         sessionRepository.findAllByUserIdAndStatus(userId, SessionStatus.ACTIVE).forEach(session -> {
             session.revoke(reason, now);
+            sessionCachePort.evict(session.tokenHash());
             auditService.record(SecurityAuditEventType.SESSION_REVOKED, userId, session.id(), securityContext, reason);
         });
+        sessionCachePort.revokeUser(userId, now);
     }
 }

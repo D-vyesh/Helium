@@ -1,0 +1,14 @@
+spring:
+  config:
+    activate:
+      on-profile: staging
+  jpa:
+    open-in-view: false
+
+management:
+  endpoint:
+    health:
+      show-details: never
+
+helium:
+  environment: staging
