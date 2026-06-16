@@ -23,7 +23,7 @@ public class ApiConfiguration {
         return new OpenAPI().info(new Info()
             .title("HELIUM API")
             .version("v1")
-            .description("Closed-beta exchange API gateway"));
+            .description("Production exchange API gateway — real-money deployment"));
     }
 
     @Bean
@@ -31,7 +31,14 @@ public class ApiConfiguration {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(List.of("http://localhost:*", "https://*.helium.exchange"));
         configuration.setAllowedMethods(List.of("GET", "POST", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With"));
+        configuration.setAllowedHeaders(List.of(
+            "Authorization", "Content-Type", "X-Requested-With",
+            "X-API-Key", "X-API-Signature", "X-API-Timestamp", "X-API-Nonce", "X-API-Body-SHA256",
+            "X-Correlation-ID"
+        ));
+        configuration.setExposedHeaders(List.of(
+            "X-Correlation-ID", "X-RateLimit-Remaining", "X-RateLimit-Reset"
+        ));
         configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", configuration);
@@ -48,7 +55,23 @@ public class ApiConfiguration {
         return http
             .csrf(csrf -> csrf.disable())
             .cors(Customizer.withDefaults())
-            .authorizeHttpRequests(authorize -> authorize.anyRequest().permitAll())
+            .authorizeHttpRequests(authorize -> authorize
+                // Public endpoints
+                .requestMatchers("/actuator/**").permitAll()
+                .requestMatchers("/api/v1/auth/**").permitAll()
+                .requestMatchers("/api/v1/markets/**").permitAll()
+                .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                .requestMatchers("/ws/**").permitAll()
+                // Admin endpoints require SCOPE_ADMIN
+                .requestMatchers("/api/v1/admin/**").hasAuthority("SCOPE_ADMIN")
+                // Trading endpoints require SCOPE_TRADE
+                .requestMatchers("/api/v1/orders/**").hasAuthority("SCOPE_TRADE")
+                // Withdrawal endpoints require SCOPE_WITHDRAW
+                .requestMatchers("/api/v1/wallets/withdraw/**").hasAuthority("SCOPE_WITHDRAW")
+                // All other authenticated API endpoints require at least SCOPE_READ
+                .requestMatchers("/api/**").hasAnyAuthority("SCOPE_READ", "ROLE_USER")
+                .anyRequest().permitAll()
+            )
             .httpBasic(basic -> basic.disable())
             .formLogin(login -> login.disable())
             .logout(logout -> logout.disable())

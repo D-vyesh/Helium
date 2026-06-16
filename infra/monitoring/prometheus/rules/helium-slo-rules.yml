@@ -1,0 +1,62 @@
+groups:
+  - name: helium_slo_rules
+    interval: 30s
+    rules:
+      - record: helium:api_error_rate_5m
+        expr: sum(rate(http_server_requests_seconds_count{application="helium-core",status=~"5.."}[5m])) / sum(rate(http_server_requests_seconds_count{application="helium-core"}[5m]))
+
+      - record: helium:api_latency_p99_5m
+        expr: histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{application="helium-core"}[5m])) by (le))
+
+      - record: helium:settlement_lag_p95_5m
+        expr: histogram_quantile(0.95, sum(rate(helium_settlement_duration_seconds_bucket[5m])) by (le))
+
+      - record: helium:outbox_backlog
+        expr: outbox_events_pending + outbox_events_dead_letter
+
+      - record: helium:websocket_fanout_p95_5m
+        expr: histogram_quantile(0.95, sum(rate(helium_websocket_fanout_duration_seconds_bucket[5m])) by (le))
+
+  - name: helium_alerts
+    rules:
+      - alert: HighErrorRate
+        expr: helium:api_error_rate_5m > 0.01
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "HELIUM API error rate above 1%"
+
+      - alert: HighLatency
+        expr: helium:api_latency_p99_5m > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HELIUM API P99 latency above 2s"
+
+      - alert: OutboxBacklogHigh
+        expr: helium:outbox_backlog > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Outbox backlog exceeds 100 events"
+
+      - alert: SettlementLagHigh
+        expr: helium:settlement_lag_p95_5m > 5
+        for: 5m
+        labels:
+          severity: critical
+          pagerduty: "true"
+        annotations:
+          summary: "Settlement P95 lag exceeds 5 seconds"
+
+# Alertmanager configuration template for routing to PagerDuty
+# route:
+#   receiver: 'pagerduty-critical'
+# receivers:
+# - name: 'pagerduty-critical'
+#   pagerduty_configs:
+#   - service_key: <PAGERDUTY_INTEGRATION_KEY>
+

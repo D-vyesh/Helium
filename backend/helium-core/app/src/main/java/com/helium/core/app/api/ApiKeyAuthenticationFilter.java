@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -22,12 +23,21 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
     private static final String SIGNATURE_HEADER = "X-API-Signature";
     private static final String TIMESTAMP_HEADER = "X-API-Timestamp";
     private static final String BODY_HASH_HEADER = "X-API-Body-SHA256";
+    private static final String NONCE_HEADER = "X-API-Nonce";
+
     private final ApiKeyService apiKeyService;
+    private final ApiKeyNonceService nonceService;
     private final ApiKeyProperties properties;
     private final Clock clock;
 
-    public ApiKeyAuthenticationFilter(ApiKeyService apiKeyService, ApiKeyProperties properties, Clock clock) {
+    public ApiKeyAuthenticationFilter(
+        ApiKeyService apiKeyService,
+        ApiKeyNonceService nonceService,
+        ApiKeyProperties properties,
+        Clock clock
+    ) {
         this.apiKeyService = apiKeyService;
+        this.nonceService = nonceService;
         this.properties = properties;
         this.clock = clock;
     }
@@ -54,21 +64,43 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
         String apiKey = required(request, API_KEY_HEADER);
         String timestamp = required(request, TIMESTAMP_HEADER);
         String signature = required(request, SIGNATURE_HEADER);
+        String nonce = request.getHeader(NONCE_HEADER);
+
+        // Validate timestamp window
         Instant signedAt = parseTimestamp(timestamp);
         Duration age = Duration.between(signedAt, Instant.now(clock)).abs();
         if (age.compareTo(properties.signatureTtl()) > 0) {
             throw new ApiUnauthorizedException("API key signature expired");
         }
+
+        // Authenticate key
         ApiKeyService.ApiKeyAuthentication authentication = apiKeyService.authenticate(apiKey, clientIp(request))
             .orElseThrow(() -> new ApiUnauthorizedException("API key rejected"));
+
+        // Validate signature
         String canonical = canonicalRequest(request, timestamp);
         if (!apiKeyService.validSignature(authentication.secret(), canonical, signature)) {
             throw new ApiUnauthorizedException("API key signature mismatch");
         }
+
+        // Validate nonce for replay protection
+        if (nonce != null && !nonce.isBlank()) {
+            if (!nonceService.validateAndConsume(authentication.keyId(), nonce)) {
+                throw new ApiUnauthorizedException("API key nonce already used (replay detected)");
+            }
+        }
+
+        // Build authorities from scopes
+        List<SimpleGrantedAuthority> authorities = new ArrayList<>();
+        authorities.add(new SimpleGrantedAuthority("ROLE_USER"));
+        authentication.scopes().forEach(scope ->
+            authorities.add(new SimpleGrantedAuthority("SCOPE_" + scope.toUpperCase()))
+        );
+
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
             authentication.userId().toString(),
             "api-key:" + authentication.keyId(),
-            List.of(new SimpleGrantedAuthority("ROLE_USER"))
+            authorities
         ));
     }
 

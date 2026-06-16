@@ -1,0 +1,71 @@
+version: '3.8'
+
+# Enterprise Multi-Region Active-Active Stub Configuration
+services:
+  # Primary Region
+  db-primary:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: helium
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: helium
+    ports:
+      - "5432:5432"
+
+  redis-primary:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  backend-us-east:
+    build: 
+      context: ./backend/helium-core
+      dockerfile: Dockerfile
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db-primary:5432/helium
+      - REDIS_URL=redis://redis-primary:6379
+      - REGION=us-east-1
+
+  # Secondary Region (Failover)
+  db-replica:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: helium
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: helium
+    command: postgres -c hot_standby=on
+    # In a real setup, replication config would be here
+
+  backend-eu-west:
+    build: 
+      context: ./backend/helium-core
+      dockerfile: Dockerfile
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db-replica:5432/helium
+      - REDIS_URL=redis://redis-primary:6379
+      - REGION=eu-west-1
+
+  # Global Load Balancer Stub
+  haproxy-global:
+    image: haproxy:2.4
+    ports:
+      - "80:80"
+    # Routes to us-east and eu-west based on latency and health checks
+
+  # External SIEM Stub for Security Incident Logging
+  siem-splunk-stub:
+    image: splunk/splunk:latest
+    environment:
+      - SPLUNK_START_ARGS=--accept-license
+      - SPLUNK_PASSWORD=password
+    ports:
+      - "8000:8000"
+
+  # Vault KMS Stub for Cross-Region Key Replication
+  vault-global:
+    image: hashicorp/vault:1.15
+    environment:
+      - VAULT_DEV_ROOT_TOKEN_ID=root
+      - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200
+    ports:
+      - "8200:8200"

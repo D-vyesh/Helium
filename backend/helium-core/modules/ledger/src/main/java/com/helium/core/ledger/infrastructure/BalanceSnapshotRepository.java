@@ -15,6 +15,9 @@ public interface BalanceSnapshotRepository extends JpaRepository<BalanceSnapshot
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<BalanceSnapshot> findByAccount_Id(UUID accountId);
 
+    @Query("select b from BalanceSnapshot b where b.account.ownerType = 'USER' and b.assetCode = :assetCode and b.account.balanceType = 'AVAILABLE'")
+    java.util.List<BalanceSnapshot> findAllUserAvailableBalances(@Param("assetCode") String assetCode);
+
     @Modifying
     @Query(
         value = """

@@ -23,6 +23,8 @@ public interface LedgerAccountRepository extends JpaRepository<LedgerAccount, UU
         BalanceType balanceType
     );
 
+    List<LedgerAccount> findAllByOwnerType(LedgerAccountOwnerType ownerType);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select account from LedgerAccount account where account.id in :ids order by account.id")
     List<LedgerAccount> findAllByIdInForUpdate(@Param("ids") Collection<UUID> ids);

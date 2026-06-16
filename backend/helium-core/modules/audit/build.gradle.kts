@@ -6,6 +6,7 @@ dependencies {
     api(project(":shared:common"))
     implementation(project(":shared:persistence"))
     implementation(project(":shared:observability"))
+    implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     testImplementation(project(":shared:test-support"))
 }
 

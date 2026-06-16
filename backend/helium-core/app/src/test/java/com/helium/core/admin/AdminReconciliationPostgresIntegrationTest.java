@@ -115,7 +115,7 @@ class AdminReconciliationPostgresIntegrationTest {
 
     @Test
     void createsCleanLedgerWalletReconciliationReport() {
-        UUID admin = activeOperator("admin-clean@example.com", Role.FINANCE_OPS);
+        UUID admin = activeOperator("admin-clean@example.com", Role.TREASURY_ADMIN);
         authenticateAs(admin);
         seedWalletScope("USDT", "TRON");
 
@@ -130,7 +130,7 @@ class AdminReconciliationPostgresIntegrationTest {
 
     @Test
     void detectsLedgerWalletDiscrepancyWithoutAdjustingBalances() {
-        UUID admin = activeOperator("admin-discrepancy@example.com", Role.COMPLIANCE);
+        UUID admin = activeOperator("admin-discrepancy@example.com", Role.COMPLIANCE_OFFICER);
         authenticateAs(admin);
         seedWalletScope("BTC", "BITCOIN");
         seedLedgerExternalBalance("BTC", "BITCOIN", new BigDecimal("2.50000000"));

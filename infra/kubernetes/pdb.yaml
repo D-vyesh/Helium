@@ -1,0 +1,12 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: helium-backend-pdb
+  namespace: helium
+  labels:
+    app.kubernetes.io/name: helium-backend
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: helium-backend

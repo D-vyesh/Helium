@@ -557,7 +557,7 @@ class WalletPostgresIntegrationTest {
 
     private UUID operationsActor(String email) {
         UUID actorId = activeUser(email);
-        bootstrapRole(actorId, Role.FINANCE_OPS);
+        bootstrapRole(actorId, Role.TREASURY_ADMIN);
         authenticateAs(actorId);
         return actorId;
     }

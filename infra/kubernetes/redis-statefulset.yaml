@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: helium-redis
+  namespace: helium
+  labels:
+    app.kubernetes.io/name: helium-redis
+    app.kubernetes.io/component: cache
+spec:
+  serviceName: helium-redis
+  replicas: 3
+  selector:
+    matchLabels:
+      app: helium-redis
+  template:
+    metadata:
+      labels:
+        app: helium-redis
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+              name: redis
+            - containerPort: 26379
+              name: sentinel
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: helium-backend-secrets
+                  key: HELIUM_REDIS_PASSWORD
+          command:
+            - sh
+            - -c
+            - |
+              if [ "$(hostname)" = "helium-redis-0" ]; then
+                redis-server --appendonly yes --requirepass "$REDIS_PASSWORD" --maxmemory 512mb --maxmemory-policy allkeys-lru
+              else
+                redis-server --appendonly yes --requirepass "$REDIS_PASSWORD" --replicaof helium-redis-0.helium-redis 6379 --masterauth "$REDIS_PASSWORD" --maxmemory 512mb --maxmemory-policy allkeys-lru
+              fi
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 768Mi
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - redis-cli -a "$REDIS_PASSWORD" ping | grep PONG
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - redis-cli -a "$REDIS_PASSWORD" ping | grep PONG
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: helium-redis
+  namespace: helium
+spec:
+  clusterIP: None
+  selector:
+    app: helium-redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+      name: redis
+    - port: 26379
+      targetPort: 26379
+      name: sentinel

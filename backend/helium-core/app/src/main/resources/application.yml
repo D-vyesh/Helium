@@ -53,10 +53,17 @@ management:
 
 helium:
   environment: ${HELIUM_ENVIRONMENT:local}
+  secrets:
+    backend: ${HELIUM_SECRETS_BACKEND:environment}
+    refresh-interval-ms: ${HELIUM_SECRETS_REFRESH_MS:300000}
   api-keys:
+    current-version: ${HELIUM_API_KEY_VERSION:v1}
     current-pepper: ${HELIUM_API_KEY_PEPPER:local-development-api-key-pepper-change-me}
+    previous-version: ${HELIUM_API_KEY_PREVIOUS_VERSION:}
     previous-pepper: ${HELIUM_API_KEY_PREVIOUS_PEPPER:}
     signature-ttl: ${HELIUM_API_KEY_SIGNATURE_TTL:5m}
+    nonce-ttl: ${HELIUM_API_KEY_NONCE_TTL:10m}
+    default-lifetime: ${HELIUM_API_KEY_DEFAULT_LIFETIME:90d}
   outbox:
     enabled: ${HELIUM_OUTBOX_ENABLED:true}
     poll-interval-ms: ${HELIUM_OUTBOX_POLL_INTERVAL_MS:1000}

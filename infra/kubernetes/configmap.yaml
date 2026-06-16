@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: helium-backend-config
+  namespace: helium
+  labels:
+    app.kubernetes.io/name: helium-backend
+    app.kubernetes.io/component: config
+data:
+  SPRING_PROFILES_ACTIVE: production
+  HELIUM_ENVIRONMENT: production
+  HELIUM_DB_URL: jdbc:postgresql://helium-postgres:5432/helium
+  HELIUM_DB_POOL_SIZE: "20"
+  HELIUM_DB_MAX_LIFETIME_MS: "1800000"
+  HELIUM_REDIS_HOST: helium-redis
+  HELIUM_REDIS_PORT: "6379"
+  HELIUM_REDIS_TIMEOUT: "2s"
+  HELIUM_HTTP_PORT: "8080"
+  HELIUM_LOG_LEVEL: INFO
+  HELIUM_OUTBOX_ENABLED: "true"
+  HELIUM_OUTBOX_POLL_INTERVAL_MS: "1000"
+  HELIUM_TRACE_SAMPLING_PROBABILITY: "1.0"
+  HELIUM_OTLP_ENDPOINT: http://otel-collector.helium:4318/v1/traces
+  HELIUM_SECRETS_BACKEND: environment
+  HELIUM_API_KEY_VERSION: v1
+  HELIUM_API_KEY_SIGNATURE_TTL: 5m
+  HELIUM_API_KEY_NONCE_TTL: 10m
+  HELIUM_API_KEY_DEFAULT_LIFETIME: 90d
+  HELIUM_SHUTDOWN_TIMEOUT: 30s

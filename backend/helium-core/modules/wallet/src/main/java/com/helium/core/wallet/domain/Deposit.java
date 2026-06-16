@@ -129,8 +129,14 @@ public class Deposit {
         if (status == DepositStatus.POSTED || status == DepositStatus.REJECTED) {
             return;
         }
+        if (nextConfirmations < 0) {
+            this.confirmations = 0;
+            return;
+        }
         if (nextConfirmations < confirmations) {
-            throw new WalletValidationException("deposit confirmations cannot decrease");
+            // Reorgs can legitimately reduce confirmations.
+            this.confirmations = nextConfirmations;
+            return;
         }
         confirmations = nextConfirmations;
         if (confirmations >= requiredConfirmations && status == DepositStatus.DETECTED) {
@@ -149,6 +155,14 @@ public class Deposit {
         this.ledgerTransactionId = Objects.requireNonNull(ledgerTransactionId, "ledgerTransactionId");
         this.status = DepositStatus.POSTED;
         this.postedAt = Objects.requireNonNull(now, "now");
+    }
+
+    public void markFailed(Instant now, String reason) {
+        if (status == DepositStatus.POSTED) {
+            return; // Can't fail if already posted, requires manual reversal
+        }
+        this.status = DepositStatus.REJECTED;
+        this.confirmedAt = null;
     }
 
     public UUID id() {

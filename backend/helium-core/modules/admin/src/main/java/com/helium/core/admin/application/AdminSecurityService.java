@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class AdminSecurityService {
-    private static final Set<Role> ADMIN_ROLES = Set.of(Role.ADMIN, Role.FINANCE_OPS, Role.COMPLIANCE);
+    private static final Set<Role> ADMIN_ROLES = Set.of(Role.ADMIN, Role.TREASURY_ADMIN, Role.COMPLIANCE_OFFICER);
 
     private final TrustedActorProvider trustedActorProvider;
     private final AuthorizationPort authorizationPort;

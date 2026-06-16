@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class WalletActorService {
-    private static final Set<Role> OPERATIONS_ROLES = Set.of(Role.ADMIN, Role.FINANCE_OPS, Role.COMPLIANCE);
+    private static final Set<Role> OPERATIONS_ROLES = Set.of(Role.ADMIN, Role.TREASURY_ADMIN, Role.COMPLIANCE_OFFICER);
 
     private final TrustedActorProvider trustedActorProvider;
     private final TrustedSystemActorProvider trustedSystemActorProvider;

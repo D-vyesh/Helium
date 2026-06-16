@@ -10,14 +10,14 @@ import com.helium.core.wallet.domain.BlockchainNetwork;
 import org.springframework.stereotype.Service;
 
 @Service
-class WalletLedgerAccounts {
+public class WalletLedgerAccounts {
     private final LedgerAccountPort ledgerAccountPort;
 
-    WalletLedgerAccounts(LedgerAccountPort ledgerAccountPort) {
+    public WalletLedgerAccounts(LedgerAccountPort ledgerAccountPort) {
         this.ledgerAccountPort = ledgerAccountPort;
     }
 
-    LedgerAccountView userAvailable(String userId, String assetCode) {
+    public LedgerAccountView userAvailable(String userId, String assetCode) {
         return ledgerAccountPort.openAccount(new CreateLedgerAccountCommand(
             LedgerAccountOwnerType.USER,
             userId,
@@ -26,7 +26,7 @@ class WalletLedgerAccounts {
         ));
     }
 
-    LedgerAccountView userLocked(String userId, String assetCode) {
+    public LedgerAccountView userLocked(String userId, String assetCode) {
         return ledgerAccountPort.openAccount(new CreateLedgerAccountCommand(
             LedgerAccountOwnerType.USER,
             userId,
@@ -35,7 +35,7 @@ class WalletLedgerAccounts {
         ));
     }
 
-    LedgerAccountView external(String networkCode, String assetCode) {
+    public LedgerAccountView external(String networkCode, String assetCode) {
         String normalizedNetwork = BlockchainNetwork.normalizeNetworkCode(networkCode);
         String normalizedAsset = Asset.normalizeCode(assetCode);
         return ledgerAccountPort.openAccount(new CreateLedgerAccountCommand(

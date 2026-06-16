@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  bitcoind:
+    image: ruimarinho/bitcoin-core:25.0
+    command:
+      -printtoconsole
+      -regtest=1
+      -rpcuser=helium
+      -rpcpassword=helium_secret
+      -rpcallowip=0.0.0.0/0
+      -fallbackfee=0.00001
+      -txindex=1
+    ports:
+      - "18443:18443"
+
+  ethereum-node:
+    image: trufflesuite/ganache:v7.9.0
+    command:
+      - "--miner.blockTime"
+      - "2"
+      - "--wallet.seed"
+      - "helium-integration-test-seed"
+    ports:
+      - "8545:8545"
+
+  # Note: solana-test-validator is very resource intensive. 
+  # Using a mock-rpc for Solana in CI if memory is constrained.
+  # For local testing, use solanalabs/solana:v1.17.0
+  solana-node:
+    image: solanalabs/solana:v1.17.0
+    command: solana-test-validator --rpc-port 8899 --reset
+    ports:
+      - "8899:8899"
+    healthcheck:
+      test: ["CMD", "solana", "ping", "--count", "1", "--url", "http://localhost:8899"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

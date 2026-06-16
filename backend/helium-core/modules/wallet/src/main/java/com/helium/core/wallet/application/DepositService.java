@@ -23,11 +23,15 @@ import com.helium.core.wallet.infrastructure.DepositAddressRepository;
 import com.helium.core.wallet.infrastructure.DepositRepository;
 import java.time.Clock;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class DepositService implements DepositPort {
+    private static final Logger log = LoggerFactory.getLogger(DepositService.class);
+
     private final DepositRepository depositRepository;
     private final DepositAddressRepository addressRepository;
     private final AssetRepository assetRepository;
@@ -38,6 +42,7 @@ public class DepositService implements DepositPort {
     private final WalletLedgerAccounts ledgerAccounts;
     private final LedgerPostingPort ledgerPostingPort;
     private final WalletAuditService auditService;
+    private final AccountFreezeWorkflow accountFreezeWorkflow;
     private final Clock clock;
 
     public DepositService(
@@ -51,6 +56,7 @@ public class DepositService implements DepositPort {
         WalletLedgerAccounts ledgerAccounts,
         LedgerPostingPort ledgerPostingPort,
         WalletAuditService auditService,
+        AccountFreezeWorkflow accountFreezeWorkflow,
         Clock clock
     ) {
         this.depositRepository = depositRepository;
@@ -63,6 +69,7 @@ public class DepositService implements DepositPort {
         this.ledgerAccounts = ledgerAccounts;
         this.ledgerPostingPort = ledgerPostingPort;
         this.auditService = auditService;
+        this.accountFreezeWorkflow = accountFreezeWorkflow;
         this.clock = clock;
     }
 
@@ -137,6 +144,19 @@ public class DepositService implements DepositPort {
             .orElseThrow(() -> new WalletValidationException("deposit was not found"));
         ChainTransactionObservation observation = observationRepository.findByMatchedDepositId(deposit.id())
             .orElseThrow(() -> new WalletValidationException("deposit has no chain observation"));
+        if (command.confirmations() < 0) {
+            log.warn("Reorg detected for deposit {}. TxHash dropped from chain.", deposit.id());
+            if (deposit.status() == DepositStatus.CONFIRMED) {
+                log.error("CRITICAL: Reorg dropped a CONFIRMED deposit! Issuing ledger reversal for {}", deposit.id());
+                reverseDeposit(deposit, actorId);
+                // Also trigger account freeze check if this reversal drove the balance negative
+                accountFreezeWorkflow.freezeAccountForNegativeBalance(deposit.userId(), "Deep Reorg Reversal: " + deposit.txHash());
+            }
+            deposit.markFailed(clock.instant(), "REORG_DETECTED");
+            auditService.record(WalletAuditEventType.DEPOSIT_CONFIRMATIONS_UPDATED, deposit.id(), actorId, "REORG_DETECTED");
+            return toView(deposit);
+        }
+
         observation.updateConfirmations(command.confirmations(), actorId, clock.instant());
         deposit.updateConfirmations(command.confirmations(), clock.instant());
         auditService.record(
@@ -169,6 +189,24 @@ public class DepositService implements DepositPort {
         ));
         deposit.markPosted(result.transactionId(), clock.instant());
         auditService.record(WalletAuditEventType.DEPOSIT_POSTED, deposit.id(), actorId, result.transactionId().toString());
+    }
+
+    private void reverseDeposit(Deposit deposit, String actorId) {
+        LedgerAccountView external = ledgerAccounts.external(deposit.networkCode(), deposit.assetCode());
+        LedgerAccountView userAvailable = ledgerAccounts.userAvailable(deposit.userId().toString(), deposit.assetCode());
+        String businessReference = "wallet:deposit:reversal:" + deposit.id();
+        LedgerPostingResult result = ledgerPostingPort.post(new LedgerPostingCommand(
+            LedgerTransactionType.ADJUSTMENT, // or REVERSAL if exists
+            businessReference,
+            businessReference,
+            "reversal of orphaned wallet deposit",
+            AuditMetadata.of(actorId, "wallet", businessReference, deposit.txHash(), "deposit reorg reversal"),
+            List.of(
+                new PostingLineCommand(external.accountId(), PostingDirection.CREDIT, deposit.amount()),
+                new PostingLineCommand(userAvailable.accountId(), PostingDirection.DEBIT, deposit.amount())
+            )
+        ));
+        log.info("Ledger reversed for deposit {} with tx {}", deposit.id(), result.transactionId());
     }
 
     static DepositView toView(Deposit deposit) {

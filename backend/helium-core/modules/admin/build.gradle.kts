@@ -7,6 +7,7 @@ dependencies {
     implementation(project(":modules:auth-user"))
     implementation(project(":modules:wallet"))
     implementation(project(":modules:trading"))
+    implementation(project(":modules:ledger"))
     implementation(project(":shared:security"))
     implementation(project(":shared:persistence"))
     implementation(project(":shared:observability"))

@@ -2,3 +2,19 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: helium
+  labels:
+    app.kubernetes.io/part-of: helium
+    environment: production
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: helium-quota
+  namespace: helium
+spec:
+  hard:
+    requests.cpu: "16"
+    requests.memory: 32Gi
+    limits.cpu: "32"
+    limits.memory: 64Gi
+    pods: "50"

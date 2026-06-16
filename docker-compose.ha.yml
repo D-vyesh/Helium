@@ -1,0 +1,269 @@
+name: helium-production-ha
+
+services:
+  # ── PostgreSQL Primary ───────────────────────────────────────────
+  postgres-primary:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-helium}
+      POSTGRES_USER: ${POSTGRES_USER:-helium}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-helium-change-me}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    command:
+      - postgres
+      - -c
+      - wal_level=replica
+      - -c
+      - max_wal_senders=5
+      - -c
+      - wal_keep_size=256MB
+      - -c
+      - hot_standby=on
+      - -c
+      - max_connections=200
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-primary-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-helium} -d ${POSTGRES_DB:-helium}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+
+  # ── PostgreSQL Replica ───────────────────────────────────────────
+  postgres-replica:
+    image: postgres:16-alpine
+    environment:
+      PGUSER: ${POSTGRES_USER:-helium}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-helium-change-me}
+    command: >
+      bash -c "
+        until pg_basebackup -h postgres-primary -D /var/lib/postgresql/data -U ${POSTGRES_USER:-helium} -Fp -Xs -P -R; do
+          echo 'Waiting for primary...'; sleep 5;
+        done;
+        chmod 0700 /var/lib/postgresql/data;
+        postgres
+      "
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+    volumes:
+      - postgres-replica-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-helium}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  # ── Redis Master ─────────────────────────────────────────────────
+  redis-master:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${HELIUM_REDIS_PASSWORD:-helium-redis-change-me}
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-master-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${HELIUM_REDIS_PASSWORD:-helium-redis-change-me}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis-replica-1:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${HELIUM_REDIS_PASSWORD:-helium-redis-change-me}
+      --replicaof redis-master 6379
+      --masterauth ${HELIUM_REDIS_PASSWORD:-helium-redis-change-me}
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    volumes:
+      - redis-replica-1-data:/data
+
+  redis-replica-2:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${HELIUM_REDIS_PASSWORD:-helium-redis-change-me}
+      --replicaof redis-master 6379
+      --masterauth ${HELIUM_REDIS_PASSWORD:-helium-redis-change-me}
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    volumes:
+      - redis-replica-2-data:/data
+
+  redis-sentinel-1:
+    image: redis:7-alpine
+    command: >
+      sh -c "
+        echo 'sentinel monitor mymaster redis-master 6379 2' > /tmp/sentinel.conf &&
+        echo 'sentinel down-after-milliseconds mymaster 5000' >> /tmp/sentinel.conf &&
+        echo 'sentinel failover-timeout mymaster 10000' >> /tmp/sentinel.conf &&
+        echo 'sentinel auth-pass mymaster ${HELIUM_REDIS_PASSWORD:-helium-redis-change-me}' >> /tmp/sentinel.conf &&
+        redis-sentinel /tmp/sentinel.conf
+      "
+    depends_on:
+      redis-master:
+        condition: service_healthy
+
+  redis-sentinel-2:
+    image: redis:7-alpine
+    command: >
+      sh -c "
+        echo 'sentinel monitor mymaster redis-master 6379 2' > /tmp/sentinel.conf &&
+        echo 'sentinel down-after-milliseconds mymaster 5000' >> /tmp/sentinel.conf &&
+        echo 'sentinel failover-timeout mymaster 10000' >> /tmp/sentinel.conf &&
+        echo 'sentinel auth-pass mymaster ${HELIUM_REDIS_PASSWORD:-helium-redis-change-me}' >> /tmp/sentinel.conf &&
+        redis-sentinel /tmp/sentinel.conf
+      "
+    depends_on:
+      redis-master:
+        condition: service_healthy
+
+  redis-sentinel-3:
+    image: redis:7-alpine
+    command: >
+      sh -c "
+        echo 'sentinel monitor mymaster redis-master 6379 2' > /tmp/sentinel.conf &&
+        echo 'sentinel down-after-milliseconds mymaster 5000' >> /tmp/sentinel.conf &&
+        echo 'sentinel failover-timeout mymaster 10000' >> /tmp/sentinel.conf &&
+        echo 'sentinel auth-pass mymaster ${HELIUM_REDIS_PASSWORD:-helium-redis-change-me}' >> /tmp/sentinel.conf &&
+        redis-sentinel /tmp/sentinel.conf
+      "
+    depends_on:
+      redis-master:
+        condition: service_healthy
+
+  # ── Backend Replicas ─────────────────────────────────────────────
+  backend-1:
+    build:
+      context: .
+      dockerfile: backend/helium-core/Dockerfile
+    environment: &backend-env
+      SPRING_PROFILES_ACTIVE: production
+      HELIUM_ENVIRONMENT: production
+      HELIUM_DB_URL: jdbc:postgresql://postgres-primary:5432/${POSTGRES_DB:-helium}
+      HELIUM_DB_USERNAME: ${POSTGRES_USER:-helium}
+      HELIUM_DB_PASSWORD: ${POSTGRES_PASSWORD:-helium-change-me}
+      HELIUM_REDIS_HOST: redis-master
+      HELIUM_REDIS_PORT: 6379
+      HELIUM_REDIS_PASSWORD: ${HELIUM_REDIS_PASSWORD:-helium-redis-change-me}
+      HELIUM_API_KEY_PEPPER: ${HELIUM_API_KEY_PEPPER:-change-me-before-production}
+      HELIUM_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+      redis-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep UP"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+
+  backend-2:
+    build:
+      context: .
+      dockerfile: backend/helium-core/Dockerfile
+    environment: *backend-env
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+      redis-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep UP"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+
+  backend-3:
+    build:
+      context: .
+      dockerfile: backend/helium-core/Dockerfile
+    environment: *backend-env
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+      redis-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep UP"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+
+  # ── Nginx Load Balancer ──────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "${HELIUM_HTTP_PORT:-8080}:80"
+    volumes:
+      - ./infra/ha/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      backend-1:
+        condition: service_healthy
+      backend-2:
+        condition: service_healthy
+      backend-3:
+        condition: service_healthy
+
+  # ── Frontend ─────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      NEXT_PUBLIC_HELIUM_API_BASE_URL: ${NEXT_PUBLIC_HELIUM_API_BASE_URL:-http://localhost:8080}
+    ports:
+      - "${HELIUM_WEB_PORT:-3000}:3000"
+    depends_on:
+      nginx:
+        condition: service_started
+
+volumes:
+  postgres-primary-data:
+  postgres-replica-data:
+  redis-master-data:
+  redis-replica-1-data:
+  redis-replica-2-data:

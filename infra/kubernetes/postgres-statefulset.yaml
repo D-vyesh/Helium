@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: helium-postgres
+  namespace: helium
+  labels:
+    app.kubernetes.io/name: helium-postgres
+    app.kubernetes.io/component: database
+spec:
+  serviceName: helium-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: helium-postgres
+  template:
+    metadata:
+      labels:
+        app: helium-postgres
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_DB
+              value: helium
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: helium-backend-secrets
+                  key: HELIUM_DB_USERNAME
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: helium-backend-secrets
+                  key: HELIUM_DB_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          args:
+            - -c
+            - max_connections=200
+            - -c
+            - shared_buffers=512MB
+            - -c
+            - wal_level=replica
+            - -c
+            - max_wal_senders=5
+            - -c
+            - wal_keep_size=256MB
+            - -c
+            - shared_preload_libraries=pg_stat_statements
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - helium
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - helium
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 50Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: helium-postgres
+  namespace: helium
+spec:
+  clusterIP: None
+  selector:
+    app: helium-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
