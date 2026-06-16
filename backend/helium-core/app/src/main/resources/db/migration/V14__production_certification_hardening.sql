@@ -18,14 +18,20 @@ alter table outbox_dead_letters
 
 -- 3. Cleanup index for expired API key nonces
 create index if not exists idx_api_key_nonces_cleanup
-    on api_key_nonces(expires_at)
-    where expires_at < now();
+    on api_key_nonces(expires_at);
 
 -- 4. Composite index for outbox operational queries
 create index if not exists idx_outbox_events_status_created
     on outbox_events(status, created_at desc);
 
 -- 5. Audit search acceleration indexes
+create table if not exists security_audit_events (
+    id uuid primary key,
+    user_id uuid,
+    event_type varchar(50) not null,
+    created_at timestamptz not null default now()
+);
+
 create index if not exists idx_security_audit_event_type_created
     on security_audit_events(event_type, created_at desc);
 
