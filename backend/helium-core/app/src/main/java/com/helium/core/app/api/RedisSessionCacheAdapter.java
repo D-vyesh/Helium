@@ -12,6 +12,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.dao.DataAccessException;
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
@@ -31,46 +32,66 @@ public class RedisSessionCacheAdapter implements SessionCachePort {
 
     @Override
     public Optional<SessionView> find(String tokenHash) {
-        return redisTemplate
-            .map(template -> template.opsForValue().get(SESSION_PREFIX + tokenHash))
-            .flatMap(this::deserialize);
+        try {
+            return redisTemplate
+                .map(template -> template.opsForValue().get(SESSION_PREFIX + tokenHash))
+                .flatMap(this::deserialize);
+        } catch (DataAccessException exception) {
+            return Optional.empty();
+        }
     }
 
     @Override
     public void store(String tokenHash, SessionView session) {
-        redisTemplate.ifPresent(template -> template.opsForValue().set(
-            SESSION_PREFIX + tokenHash,
-            serialize(session),
-            Duration.between(Instant.now(), session.expiresAt()).abs()
-        ));
+        try {
+            redisTemplate.ifPresent(template -> template.opsForValue().set(
+                SESSION_PREFIX + tokenHash,
+                serialize(session),
+                Duration.between(Instant.now(), session.expiresAt()).abs()
+            ));
+        } catch (DataAccessException exception) {
+            // Redis is an optional cache; the database-backed session remains authoritative.
+        }
     }
 
     @Override
     public void evict(String tokenHash) {
-        redisTemplate.ifPresent(template -> template.delete(SESSION_PREFIX + tokenHash));
+        try {
+            redisTemplate.ifPresent(template -> template.delete(SESSION_PREFIX + tokenHash));
+        } catch (DataAccessException exception) {
+            // Best-effort cache eviction.
+        }
     }
 
     @Override
     public void revokeUser(UUID userId, Instant revokedAt) {
-        redisTemplate.ifPresent(template -> {
-            template.opsForValue().set(USER_REVOKED_PREFIX + userId, revokedAt.toString(), Duration.ofDays(45));
-            template.convertAndSend("helium:sessions:revoked", userId + ":" + revokedAt);
-        });
+        try {
+            redisTemplate.ifPresent(template -> {
+                template.opsForValue().set(USER_REVOKED_PREFIX + userId, revokedAt.toString(), Duration.ofDays(45));
+                template.convertAndSend("helium:sessions:revoked", userId + ":" + revokedAt);
+            });
+        } catch (DataAccessException exception) {
+            // Best-effort cross-node revocation hint; database state still revokes sessions.
+        }
     }
 
     @Override
     public boolean isUserRevokedAfter(UUID userId, Instant sessionCreatedAt) {
-        return redisTemplate
-            .map(template -> template.opsForValue().get(USER_REVOKED_PREFIX + userId))
-            .flatMap(value -> {
-                try {
-                    return Optional.of(Instant.parse(value));
-                } catch (RuntimeException exception) {
-                    return Optional.empty();
-                }
-            })
-            .map(revokedAt -> !revokedAt.isBefore(sessionCreatedAt))
-            .orElse(false);
+        try {
+            return redisTemplate
+                .map(template -> template.opsForValue().get(USER_REVOKED_PREFIX + userId))
+                .flatMap(value -> {
+                    try {
+                        return Optional.of(Instant.parse(value));
+                    } catch (RuntimeException exception) {
+                        return Optional.empty();
+                    }
+                })
+                .map(revokedAt -> !revokedAt.isBefore(sessionCreatedAt))
+                .orElse(false);
+        } catch (DataAccessException exception) {
+            return false;
+        }
     }
 
     private String serialize(SessionView session) {

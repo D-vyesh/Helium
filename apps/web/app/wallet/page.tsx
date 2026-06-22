@@ -1,7 +1,8 @@
 import { PageHeader } from "@/components/layout/app-shell";
 import { ProtectedShell } from "@/components/layout/protected-shell";
+import { ButtonLink } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AssetList, BalanceSummary, DepositAddresses, DepositHistory, WithdrawalHistory } from "@/features/wallet/components/wallet-panels";
-import Link from "next/link";
 
 export default function WalletPage() {
   return (
@@ -10,29 +11,37 @@ export default function WalletPage() {
       <div className="space-y-6">
         <BalanceSummary />
         <div className="flex flex-wrap gap-2">
-          <Link className="rounded bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950" href="/wallet/deposit">Deposit</Link>
-          <Link className="rounded border border-slate-700 px-4 py-2 text-sm text-slate-200" href="/wallet/withdraw">Withdraw</Link>
+          <ButtonLink href="/wallet/deposit">Deposit</ButtonLink>
+          <ButtonLink href="/wallet/withdraw" variant="secondary">Withdraw</ButtonLink>
         </div>
         <AssetList />
         <section className="grid gap-6 xl:grid-cols-2">
-          <div>
-            <h2 className="mb-3 text-lg font-semibold">Deposit addresses</h2>
+          <Card>
+            <CardHeader><CardTitle>Deposit Addresses</CardTitle></CardHeader>
+            <CardContent>
             <DepositAddresses />
-          </div>
-          <div>
-            <h2 className="mb-3 text-lg font-semibold">Pending withdrawals</h2>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle>Pending Withdrawals</CardTitle></CardHeader>
+            <CardContent>
             <WithdrawalHistory pendingOnly />
-          </div>
+            </CardContent>
+          </Card>
         </section>
         <section className="grid gap-6 xl:grid-cols-2">
-          <div>
-            <h2 className="mb-3 text-lg font-semibold">Deposit history</h2>
+          <Card>
+            <CardHeader><CardTitle>Deposit History</CardTitle></CardHeader>
+            <CardContent>
             <DepositHistory />
-          </div>
-          <div>
-            <h2 className="mb-3 text-lg font-semibold">Withdrawal history</h2>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle>Withdrawal History</CardTitle></CardHeader>
+            <CardContent>
             <WithdrawalHistory />
-          </div>
+            </CardContent>
+          </Card>
         </section>
       </div>
     </ProtectedShell>

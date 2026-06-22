@@ -106,6 +106,7 @@ class ApiGatewayPostgresIntegrationTest {
                 ledger_balance_snapshots,
                 ledger_accounts,
                 auth_security_audit_events,
+                login_attempts,
                 auth_login_attempt_throttles,
                 auth_mfa_methods,
                 auth_password_reset_tokens,
@@ -141,6 +142,62 @@ class ApiGatewayPostgresIntegrationTest {
             .andExpect(status().isBadRequest())
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
             .andExpect(jsonPath("$.title").value("Validation failed"));
+    }
+
+    @Test
+    void supportsProductionAuthEndpointFlow() throws Exception {
+        String signupResponse = mockMvc.perform(post("/api/v1/auth/signup")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"email":"signup-api@example.com","password":"Initial-password-123","confirmPassword":"Initial-password-123"}
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.emailVerificationRequired").value(true))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+        String verificationToken = objectMapper.readTree(signupResponse).get("verificationToken").asText();
+
+        mockMvc.perform(get("/api/v1/auth/verify").param("token", verificationToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.verified").value(true));
+
+        String loginResponse = mockMvc.perform(post("/api/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"email":"signup-api@example.com","password":"Initial-password-123"}
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accessToken").isNotEmpty())
+            .andExpect(jsonPath("$.refreshToken").isNotEmpty())
+            .andExpect(jsonPath("$.user.email").value("signup-api@example.com"))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+        JsonNode loginJson = objectMapper.readTree(loginResponse);
+        String refreshToken = loginJson.get("refreshToken").asText();
+
+        String refreshResponse = mockMvc.perform(post("/api/v1/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"refreshToken\":\"" + refreshToken + "\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accessToken").isNotEmpty())
+            .andExpect(jsonPath("$.refreshToken").isNotEmpty())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+        String rotatedRefreshToken = objectMapper.readTree(refreshResponse).get("refreshToken").asText();
+        assertThat(rotatedRefreshToken).isNotEqualTo(refreshToken);
+
+        mockMvc.perform(post("/api/v1/auth/logout")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"refreshToken\":\"" + rotatedRefreshToken + "\",\"allSessions\":true}"))
+            .andExpect(status().isNoContent());
+
+        assertThat(jdbcTemplate.queryForObject(
+            "select count(*) from refresh_tokens where status = 'ACTIVE'",
+            Integer.class
+        )).isZero();
     }
 
     @Test

@@ -60,7 +60,7 @@ public class UserAccount {
         this.id = UUID.randomUUID();
         this.email = normalizeEmail(email);
         this.displayName = requireText(displayName, "displayName", 120);
-        this.status = UserAccountStatus.PENDING_VERIFICATION;
+        this.status = UserAccountStatus.EMAIL_UNVERIFIED;
         this.createdAt = Objects.requireNonNull(now, "now");
         this.updatedAt = now;
     }
@@ -76,7 +76,7 @@ public class UserAccount {
         if (emailVerifiedAt == null) {
             emailVerifiedAt = now;
         }
-        if (status == UserAccountStatus.PENDING_VERIFICATION) {
+        if (status == UserAccountStatus.EMAIL_UNVERIFIED) {
             status = UserAccountStatus.ACTIVE;
         }
         updatedAt = now;
@@ -125,7 +125,7 @@ public class UserAccount {
         if (status != UserAccountStatus.SUSPENDED) {
             throw new AuthValidationException("only suspended accounts can be reactivated");
         }
-        status = emailVerifiedAt == null ? UserAccountStatus.PENDING_VERIFICATION : UserAccountStatus.ACTIVE;
+        status = emailVerifiedAt == null ? UserAccountStatus.EMAIL_UNVERIFIED : UserAccountStatus.ACTIVE;
         failedLoginAttempts = 0;
         lockedUntil = null;
         updatedAt = now;
@@ -135,7 +135,7 @@ public class UserAccount {
         if (status != UserAccountStatus.LOCKED) {
             throw new AuthValidationException("only locked accounts can be unlocked");
         }
-        status = emailVerifiedAt == null ? UserAccountStatus.PENDING_VERIFICATION : UserAccountStatus.ACTIVE;
+        status = emailVerifiedAt == null ? UserAccountStatus.EMAIL_UNVERIFIED : UserAccountStatus.ACTIVE;
         failedLoginAttempts = 0;
         lockedUntil = null;
         updatedAt = now;
@@ -143,7 +143,7 @@ public class UserAccount {
 
     private void refreshExpiredLock(Instant now) {
         if (status == UserAccountStatus.LOCKED && lockedUntil != null && !lockedUntil.isAfter(now)) {
-            status = emailVerifiedAt == null ? UserAccountStatus.PENDING_VERIFICATION : UserAccountStatus.ACTIVE;
+            status = emailVerifiedAt == null ? UserAccountStatus.EMAIL_UNVERIFIED : UserAccountStatus.ACTIVE;
             failedLoginAttempts = 0;
             lockedUntil = null;
             updatedAt = now;

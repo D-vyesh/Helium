@@ -1,5 +1,8 @@
 "use client";
 
+import { AssetCard, PortfolioChart, TransactionTimeline, WalletBalanceCard } from "@/components/exchange/exchange-components";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/table";
 import { EmptyState, ErrorState, FieldError, LoadingState } from "@/components/ui/state";
 import { withdrawalSchema } from "@/features/auth/schemas";
@@ -19,11 +22,15 @@ export function BalanceSummary() {
   if (query.isError) return <ErrorState title="Could not load balances" />;
   const total = query.data?.reduce((sum, item) => sum + Number(item.totalUsd), 0) ?? 0;
   const locked = query.data?.reduce((sum, item) => sum + Number(item.locked) * (item.asset === "USD" ? 1 : 0), 0) ?? 0;
+  const curve = (query.data ?? []).map((item, index) => Number(item.totalUsd) + index * 180);
   return (
-    <section className="grid gap-4 md:grid-cols-3">
-      <Metric label="Portfolio value" value={usd(total.toFixed(2))} />
-      <Metric label="Assets" value={`${query.data?.length ?? 0}`} />
-      <Metric label="Locked USD" value={usd(locked.toFixed(2))} />
+    <section className="grid gap-4 xl:grid-cols-[1fr_420px]">
+      <div className="grid gap-4 md:grid-cols-3">
+        <WalletBalanceCard detail="Marked from ledger snapshots" label="Portfolio value" value={usd(total.toFixed(2))} />
+        <WalletBalanceCard detail="Enabled custody assets" label="Assets" value={`${query.data?.length ?? 0}`} />
+        <WalletBalanceCard detail="Reserved for open orders" label="Locked USD" value={usd(locked.toFixed(2))} />
+      </div>
+      <PortfolioChart values={curve.length ? curve : [1, 1, 1]} />
     </section>
   );
 }
@@ -33,19 +40,7 @@ export function AssetList() {
   if (query.isLoading) return <LoadingState label="Loading assets" />;
   if (query.isError) return <ErrorState title="Could not load assets" />;
   if (!query.data?.length) return <EmptyState title="No wallet assets" />;
-  return (
-    <DataTable
-      columns={["Asset", "Available", "Locked", "Value", "Deposit", "Withdraw"]}
-      rows={query.data.map((asset) => [
-        <span key="asset" className="font-medium">{asset.asset} <span className="text-slate-500">{asset.name}</span></span>,
-        asset.available,
-        asset.locked,
-        usd(asset.totalUsd),
-        asset.depositEnabled ? "Enabled" : "Disabled",
-        asset.withdrawalEnabled ? "Enabled" : "Disabled"
-      ])}
-    />
-  );
+  return <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{query.data.map((asset) => <AssetCard asset={{ ...asset, totalUsd: usd(asset.totalUsd) }} key={asset.asset} />)}</div>;
 }
 
 export function DepositAddresses() {
@@ -56,11 +51,13 @@ export function DepositAddresses() {
   return (
     <div className="grid gap-3 lg:grid-cols-2">
       {query.data.map((address) => (
-        <div className="rounded border border-slate-800 bg-slate-900 p-4" key={`${address.asset}-${address.network}`}>
-          <p className="text-sm font-medium">{address.asset} on {address.network}</p>
-          <p className="mt-2 break-all rounded bg-slate-950 p-3 font-mono text-xs text-slate-300">{address.address}</p>
-          {address.tag ? <p className="mt-2 text-xs text-slate-400">Tag {address.tag}</p> : null}
-        </div>
+        <Card key={`${address.asset}-${address.network}`}>
+          <CardContent>
+            <p className="text-sm font-semibold">{address.asset} on {address.network}</p>
+            <p className="mt-2 break-all rounded-md border border-border bg-black/22 p-3 font-mono text-xs text-slate-300">{address.address}</p>
+            {address.tag ? <p className="mt-2 text-xs text-muted-foreground">Tag {address.tag}</p> : null}
+          </CardContent>
+        </Card>
       ))}
     </div>
   );
@@ -85,6 +82,7 @@ export function WithdrawalHistory({ pendingOnly = false }: Readonly<{ pendingOnl
   if (query.isError) return <ErrorState title="Could not load withdrawals" />;
   const rows = (query.data ?? []).filter((withdrawal) => !pendingOnly || ["REQUESTED", "APPROVED", "BROADCAST"].includes(withdrawal.status));
   if (!rows.length) return <EmptyState title={pendingOnly ? "No pending withdrawals" : "No withdrawals yet"} />;
+  if (pendingOnly) return <TransactionTimeline items={rows} />;
   return (
     <DataTable
       columns={["Asset", "Amount", "Fee", "Network", "Destination", "Status"]}
@@ -108,43 +106,34 @@ export function WithdrawalForm() {
   });
 
   return (
-    <form className="space-y-4 rounded border border-slate-800 bg-slate-900 p-4" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
+    <form className="glass-panel space-y-4 rounded-lg p-4" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
       <div className="grid gap-4 md:grid-cols-2">
         <label className="text-sm">
           Asset
-          <input className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2" {...form.register("asset")} />
+          <input className="mt-1 h-10 w-full rounded-md border border-border bg-black/20 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" {...form.register("asset")} />
           <FieldError message={form.formState.errors.asset?.message} />
         </label>
         <label className="text-sm">
           Network
-          <input className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2" {...form.register("network")} />
+          <input className="mt-1 h-10 w-full rounded-md border border-border bg-black/20 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" {...form.register("network")} />
           <FieldError message={form.formState.errors.network?.message} />
         </label>
         <label className="text-sm">
           Amount
-          <input className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2" {...form.register("amount")} />
+          <input className="mt-1 h-10 w-full rounded-md border border-border bg-black/20 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" {...form.register("amount")} />
           <FieldError message={form.formState.errors.amount?.message} />
         </label>
         <label className="text-sm">
           Destination
-          <input className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2" {...form.register("destination")} />
+          <input className="mt-1 h-10 w-full rounded-md border border-border bg-black/20 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" {...form.register("destination")} />
           <FieldError message={form.formState.errors.destination?.message} />
         </label>
       </div>
       {mutation.isError ? <p className="text-sm text-red-300">Withdrawal request failed.</p> : null}
       {mutation.isSuccess ? <p className="text-sm text-emerald-300">Withdrawal requested.</p> : null}
-      <button className="rounded bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950" disabled={mutation.isPending} type="submit">
+      <Button disabled={mutation.isPending} type="submit">
         Request withdrawal
-      </button>
+      </Button>
     </form>
-  );
-}
-
-function Metric({ label, value }: Readonly<{ label: string; value: string }>) {
-  return (
-    <div className="rounded border border-slate-800 bg-slate-900 p-4">
-      <p className="text-xs uppercase text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-semibold">{value}</p>
-    </div>
   );
 }

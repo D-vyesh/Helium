@@ -20,6 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class SessionService implements SessionPort {
+    private static final java.time.Duration REFRESH_TOKEN_LIFETIME = java.time.Duration.ofDays(30);
+
     private final UserSessionRepository sessionRepository;
     private final UserAccountRepository userAccountRepository;
     private final RoleGrantRepository roleGrantRepository;
@@ -90,12 +92,50 @@ public class SessionService implements SessionPort {
 
     @Override
     @Transactional
+    public RefreshTokenRotationResult rotate(String rawToken, SecurityContextData securityContext) {
+        String tokenHash = tokenCodec.hash(rawToken);
+        UserSession existing = sessionRepository.findByTokenHash(tokenHash)
+            .orElseThrow(() -> new AuthValidationException("refresh token is invalid"));
+        UserAccount account = userAccountRepository.findByIdForUpdate(existing.userId())
+            .orElseThrow(() -> new AuthValidationException("user account was not found"));
+        Instant now = clock.instant();
+        if (!account.canAuthenticate(now) || !existing.isActive(now)) {
+            throw new AuthValidationException("refresh token is not active");
+        }
+        existing.revoke("refresh token rotated", now);
+        sessionCachePort.evict(existing.tokenHash());
+
+        TokenValue token = tokenCodec.generate();
+        UserSession replacement = UserSession.create(
+            existing.userId(),
+            token.tokenHash(),
+            securityContext.ipAddress(),
+            securityContext.userAgent(),
+            REFRESH_TOKEN_LIFETIME,
+            now
+        );
+        sessionRepository.save(replacement);
+        Set<Role> roles = rolesFor(existing.userId());
+        auditService.record(SecurityAuditEventType.SESSION_REVOKED, existing.userId(), existing.id(), securityContext, "refresh token rotated");
+        return new RefreshTokenRotationResult(existing.userId(), token.rawToken(), replacement.expiresAt(), roles);
+    }
+
+    @Override
+    @Transactional
     public void logout(String rawToken, SecurityContextData securityContext) {
         sessionRepository.findByTokenHash(tokenCodec.hash(rawToken)).ifPresent(session -> {
             session.revoke("logout", clock.instant());
             sessionCachePort.evict(session.tokenHash());
             auditService.record(SecurityAuditEventType.LOGOUT, session.userId(), session.id(), securityContext, "session logged out");
         });
+    }
+
+    @Override
+    @Transactional
+    public void logoutAll(String rawToken, SecurityContextData securityContext) {
+        sessionRepository.findByTokenHash(tokenCodec.hash(rawToken)).ifPresent(session ->
+            revokeActiveSessions(session.userId(), "logout all sessions", securityContext)
+        );
     }
 
     @Override
@@ -119,5 +159,11 @@ public class SessionService implements SessionPort {
             auditService.record(SecurityAuditEventType.SESSION_REVOKED, userId, session.id(), securityContext, reason);
         });
         sessionCachePort.revokeUser(userId, now);
+    }
+
+    private Set<Role> rolesFor(UUID userId) {
+        return roleGrantRepository.findAllByUserIdAndRevokedAtIsNull(userId).stream()
+            .map(grant -> grant.role())
+            .collect(Collectors.toUnmodifiableSet());
     }
 }

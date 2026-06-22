@@ -1,7 +1,7 @@
 package com.helium.core.authuser.domain;
 
 public enum UserAccountStatus {
-    PENDING_VERIFICATION,
+    EMAIL_UNVERIFIED,
     ACTIVE,
     LOCKED,
     SUSPENDED,

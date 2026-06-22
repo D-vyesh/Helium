@@ -24,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AuthenticationTransactionService {
-    private static final int MAXIMUM_FAILED_ATTEMPTS = 20;
+    private static final int MAXIMUM_FAILED_ATTEMPTS = 5;
     private static final Duration ACCOUNT_LOCK_DURATION = Duration.ofMinutes(15);
     private static final Duration SESSION_LIFETIME = Duration.ofDays(30);
 
@@ -35,6 +35,7 @@ public class AuthenticationTransactionService {
     private final MfaMethodRepository mfaMethodRepository;
     private final SessionService sessionService;
     private final LoginAttemptThrottleService throttleService;
+    private final LoginAttemptHistoryService loginAttemptHistoryService;
     private final TokenCodec tokenCodec;
     private final SecurityAuditService auditService;
     private final Clock clock;
@@ -47,6 +48,7 @@ public class AuthenticationTransactionService {
         MfaMethodRepository mfaMethodRepository,
         SessionService sessionService,
         LoginAttemptThrottleService throttleService,
+        LoginAttemptHistoryService loginAttemptHistoryService,
         TokenCodec tokenCodec,
         SecurityAuditService auditService,
         Clock clock
@@ -58,6 +60,7 @@ public class AuthenticationTransactionService {
         this.mfaMethodRepository = mfaMethodRepository;
         this.sessionService = sessionService;
         this.throttleService = throttleService;
+        this.loginAttemptHistoryService = loginAttemptHistoryService;
         this.tokenCodec = tokenCodec;
         this.auditService = auditService;
         this.clock = clock;
@@ -66,7 +69,8 @@ public class AuthenticationTransactionService {
     @Transactional
     public LoginResult recordAnonymousFailure(String email, SecurityContextData context, String details) {
         throttleService.recordFailure(email, context.ipAddress());
-        auditService.record(SecurityAuditEventType.LOGIN_FAILED, null, null, context, details);
+        loginAttemptHistoryService.record(null, email, false, details, context);
+        auditService.record(SecurityAuditEventType.AUTH_LOGIN_FAILED, null, null, context, details);
         return LoginResult.failed(LoginFailureReason.AUTHENTICATION_FAILED);
     }
 
@@ -74,12 +78,13 @@ public class AuthenticationTransactionService {
     public LoginResult recordFailedLogin(UUID userId, String email, SecurityContextData context) {
         UserAccount account = userAccountRepository.findByIdForUpdate(userId)
             .orElseThrow(() -> new IllegalStateException("user account is missing"));
-        boolean sourceBlocked = throttleService.recordFailure(email, context.ipAddress());
+        throttleService.recordFailure(email, context.ipAddress());
+        loginAttemptHistoryService.record(userId, email, false, "invalid credentials", context);
         boolean accountLocked = false;
-        if (!sourceBlocked && account.status() == UserAccountStatus.ACTIVE) {
+        if (account.status() == UserAccountStatus.ACTIVE) {
             accountLocked = account.recordFailedLogin(MAXIMUM_FAILED_ATTEMPTS, ACCOUNT_LOCK_DURATION, clock.instant());
         }
-        auditService.record(SecurityAuditEventType.LOGIN_FAILED, userId, null, context, "invalid credentials");
+        auditService.record(SecurityAuditEventType.AUTH_LOGIN_FAILED, userId, null, context, "invalid credentials");
         if (accountLocked) {
             sessionService.revokeActiveSessions(userId, "account locked", context);
             auditService.record(SecurityAuditEventType.ACCOUNT_LOCKED, userId, null, context, "failed login limit reached");
@@ -101,14 +106,16 @@ public class AuthenticationTransactionService {
         Instant now = clock.instant();
 
         if (!Objects.equals(credential.passwordChangedAt(), expectedPasswordChangedAt) || !account.canAuthenticate(now)) {
-            auditService.record(SecurityAuditEventType.LOGIN_FAILED, userId, null, context, "authentication state changed");
+            loginAttemptHistoryService.record(userId, email, false, "account unavailable", context);
+            auditService.record(SecurityAuditEventType.AUTH_LOGIN_FAILED, userId, null, context, "authentication state changed");
             return LoginResult.failed(LoginFailureReason.AUTHENTICATION_FAILED);
         }
 
         throttleService.clear(email, context.ipAddress());
         account.recordSuccessfulLogin(now);
         if (mfaMethodRepository.existsByUserIdAndStatus(userId, MfaStatus.ENABLED)) {
-            auditService.record(SecurityAuditEventType.LOGIN_FAILED, userId, null, context, "MFA_REQUIRED");
+            loginAttemptHistoryService.record(userId, email, false, "MFA_REQUIRED", context);
+            auditService.record(SecurityAuditEventType.AUTH_LOGIN_FAILED, userId, null, context, "MFA_REQUIRED");
             return LoginResult.failed(LoginFailureReason.MFA_REQUIRED);
         }
 
@@ -125,7 +132,8 @@ public class AuthenticationTransactionService {
         Set<Role> roles = roleGrantRepository.findAllByUserIdAndRevokedAtIsNull(userId).stream()
             .map(grant -> grant.role())
             .collect(Collectors.toUnmodifiableSet());
-        auditService.record(SecurityAuditEventType.LOGIN_SUCCEEDED, userId, session.id(), context, "login succeeded");
+        loginAttemptHistoryService.record(userId, email, true, null, context);
+        auditService.record(SecurityAuditEventType.AUTH_LOGIN_SUCCESS, userId, session.id(), context, "login succeeded");
         return LoginResult.succeeded(userId, token.rawToken(), session.expiresAt(), roles);
     }
 }

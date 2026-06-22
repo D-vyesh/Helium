@@ -12,6 +12,7 @@ import com.helium.core.authuser.application.LoginCommand;
 import com.helium.core.authuser.application.LoginFailureReason;
 import com.helium.core.authuser.application.LoginResult;
 import com.helium.core.authuser.application.PasswordManagementPort;
+import com.helium.core.authuser.application.RefreshTokenRotationResult;
 import com.helium.core.authuser.application.RegistrationCommand;
 import com.helium.core.authuser.application.RegistrationPort;
 import com.helium.core.authuser.application.RegistrationResult;
@@ -86,6 +87,7 @@ class AuthUserPostgresIntegrationTest {
         jdbcTemplate.execute("""
             truncate table
                 auth_security_audit_events,
+                login_attempts,
                 auth_login_attempt_throttles,
                 auth_mfa_methods,
                 auth_password_reset_tokens,
@@ -104,7 +106,7 @@ class AuthUserPostgresIntegrationTest {
     }
 
     @Test
-    void registersWithArgon2idAndHashedVerificationTokenThenVerifiesEmail() {
+    void signupSuccessStoresBCryptAndHashedVerificationTokenThenVerifiesEmail() {
         RegistrationResult result = register("User@Example.com");
 
         Map<String, Object> credential = jdbcTemplate.queryForMap(
@@ -117,9 +119,9 @@ class AuthUserPostgresIntegrationTest {
             result.userId()
         );
 
-        assertThat(credential.get("password_hash").toString()).startsWith("$argon2id$").doesNotContain(INITIAL_PASSWORD);
+        assertThat(credential.get("password_hash").toString()).startsWith("$2").doesNotContain(INITIAL_PASSWORD);
         assertThat(storedVerificationHash).hasSize(64).isNotEqualTo(result.emailVerificationToken());
-        assertThat(statusOf(result.userId())).isEqualTo("PENDING_VERIFICATION");
+        assertThat(statusOf(result.userId())).isEqualTo("EMAIL_UNVERIFIED");
 
         emailVerificationPort.verify(result.emailVerificationToken(), CONTEXT);
 
@@ -148,11 +150,11 @@ class AuthUserPostgresIntegrationTest {
     }
 
     @Test
-    void locksAccountAfterTwentyFailedLoginsAcrossSources() {
+    void locksAccountAfterFiveFailedLogins() {
         RegistrationResult user = registerAndVerify("locked@example.com");
         LoginResult existingLogin = login("locked@example.com", INITIAL_PASSWORD);
 
-        for (int attempt = 0; attempt < 20; attempt++) {
+        for (int attempt = 0; attempt < 5; attempt++) {
             assertThat(loginFromIp("locked@example.com", "Wrong-password-123", "192.0.2." + attempt).authenticated()).isFalse();
         }
 
@@ -163,16 +165,46 @@ class AuthUserPostgresIntegrationTest {
     }
 
     @Test
-    void throttlesRepeatedFailuresWithoutRevealingAccountState() {
-        RegistrationResult user = registerAndVerify("throttled@example.com");
-
+    void recordsAnonymousLoginFailuresWithoutCreatingUsers() {
         for (int attempt = 0; attempt < 6; attempt++) {
-            LoginResult result = login("throttled@example.com", "Wrong-password-123");
+            LoginResult result = login("missing@example.com", "Wrong-password-123");
             assertThat(result.authenticated()).isFalse();
             assertThat(result.failureReason()).isEqualTo(LoginFailureReason.AUTHENTICATION_FAILED);
         }
 
-        assertThat(statusOf(user.userId())).isEqualTo("ACTIVE");
+        assertThat(jdbcTemplate.queryForObject(
+            "select count(*) from login_attempts where email = 'missing@example.com' and success = false",
+            Integer.class
+        )).isEqualTo(6);
+    }
+
+    @Test
+    void rejectsWeakPasswords() {
+        assertThatThrownBy(() -> registrationPort.register(new RegistrationCommand(
+            "weak@example.com",
+            "Weak User",
+            "lowercase1234",
+            CONTEXT
+        )))
+            .isInstanceOf(AuthValidationException.class)
+            .hasMessageContaining("uppercase");
+    }
+
+    @Test
+    void refreshTokenRotationRevokesPreviousTokenAndIssuesReplacement() {
+        registerAndVerify("refresh@example.com");
+        LoginResult login = login("refresh@example.com", INITIAL_PASSWORD);
+
+        RefreshTokenRotationResult rotation = sessionPort.rotate(login.sessionToken(), CONTEXT);
+
+        assertThat(rotation.refreshToken()).isNotEqualTo(login.sessionToken());
+        assertThat(sessionPort.validate(login.sessionToken())).isEmpty();
+        assertThat(sessionPort.validate(rotation.refreshToken())).isPresent();
+        assertThat(jdbcTemplate.queryForObject(
+            "select count(*) from auth_user_sessions where user_id = ? and status = 'ACTIVE'",
+            Integer.class,
+            rotation.userId()
+        )).isOne();
     }
 
     @Test
@@ -270,12 +302,12 @@ class AuthUserPostgresIntegrationTest {
     }
 
     @Test
-    void duplicateRegistrationUsesEnumerationSafeResponseAndDatabaseMutationOfAuditEvents() {
+    void duplicateEmailIsRejectedAndDatabaseMutationOfAuditEventsIsBlocked() {
         RegistrationResult user = register("duplicate@example.com");
 
-        RegistrationResult duplicate = register("DUPLICATE@example.com");
-        assertThat(duplicate.userId()).isNotEqualTo(user.userId());
-        assertThat(duplicate.emailVerificationToken()).isNotBlank();
+        assertThatThrownBy(() -> register("DUPLICATE@example.com"))
+            .isInstanceOf(AuthValidationException.class)
+            .hasMessageContaining("email is already registered");
         assertThat(jdbcTemplate.queryForObject(
             "select count(*) from auth_user_accounts where email = 'duplicate@example.com'",
             Integer.class

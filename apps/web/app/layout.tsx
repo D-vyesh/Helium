@@ -4,7 +4,7 @@ import { Providers } from "./providers";
 
 export const metadata: Metadata = {
   title: "HELIUM",
-  description: "HELIUM crypto exchange MVP"
+  description: "HELIUM institutional exchange"
 };
 
 export default function RootLayout({
@@ -13,11 +13,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <body>
         <Providers>{children}</Providers>
       </body>
     </html>
   );
 }
-

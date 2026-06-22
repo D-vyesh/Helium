@@ -70,6 +70,6 @@ public class EmailVerificationService implements EmailVerificationPort {
             .orElseThrow(() -> new AuthValidationException("user account was not found"));
         account.verifyEmail(now);
         tokenRepository.findAllByUserIdAndConsumedAtIsNull(account.id()).forEach(activeToken -> activeToken.invalidate(now));
-        auditService.record(SecurityAuditEventType.EMAIL_VERIFIED, account.id(), null, securityContext, "email verified");
+        auditService.record(SecurityAuditEventType.AUTH_EMAIL_VERIFIED, account.id(), null, securityContext, "email verified");
     }
 }

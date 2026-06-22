@@ -4,14 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 
-class Argon2idPasswordHasherTest {
-    private final Argon2idPasswordHasher passwordHasher = new Argon2idPasswordHasher();
+class BCryptPasswordHasherTest {
+    private final BCryptPasswordHasher passwordHasher = new BCryptPasswordHasher();
 
     @Test
-    void hashesAndVerifiesPasswordUsingArgon2id() {
+    void hashesAndVerifiesPasswordUsingBCrypt() {
         String hash = passwordHasher.hash("A-strong-password-123");
 
-        assertThat(hash).startsWith("$argon2id$");
+        assertThat(hash).startsWith("$2");
         assertThat(hash).doesNotContain("A-strong-password-123");
         assertThat(passwordHasher.matches("A-strong-password-123", hash)).isTrue();
         assertThat(passwordHasher.matches("wrong-password", hash)).isFalse();

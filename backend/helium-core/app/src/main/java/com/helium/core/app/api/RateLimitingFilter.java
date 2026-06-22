@@ -13,6 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.MediaType;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.beans.factory.ObjectProvider;
@@ -104,18 +105,24 @@ public class RateLimitingFilter extends OncePerRequestFilter {
     }
 
     private long increment(String key, long minute) {
-        return redisTemplate.map(template -> {
-            String redisKey = "helium:rate-limit:" + key;
-            Long count = template.opsForValue().increment(redisKey);
-            if (count != null && count == 1L) {
-                template.expire(redisKey, Duration.ofMinutes(2));
-            }
-            return count == null ? 1L : count;
-        }).orElseGet(() -> {
-            int count = buckets.computeIfAbsent(key, ignored -> new Bucket(minute)).count.incrementAndGet();
-            buckets.entrySet().removeIf(entry -> entry.getValue().minute < minute - 1);
-            return (long) count;
-        });
+        try {
+            return redisTemplate.map(template -> {
+                String redisKey = "helium:rate-limit:" + key;
+                Long count = template.opsForValue().increment(redisKey);
+                if (count != null && count == 1L) {
+                    template.expire(redisKey, Duration.ofMinutes(2));
+                }
+                return count == null ? 1L : count;
+            }).orElseGet(() -> incrementInMemory(key, minute));
+        } catch (DataAccessException exception) {
+            return incrementInMemory(key, minute);
+        }
+    }
+
+    private long incrementInMemory(String key, long minute) {
+        int count = buckets.computeIfAbsent(key, ignored -> new Bucket(minute)).count.incrementAndGet();
+        buckets.entrySet().removeIf(entry -> entry.getValue().minute < minute - 1);
+        return (long) count;
     }
 
     private record Bucket(long minute, AtomicInteger count) {

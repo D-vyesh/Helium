@@ -17,13 +17,15 @@ final class ApiSecurity {
             .map(value -> value.split(",")[0].trim())
             .filter(value -> !value.isBlank())
             .orElseGet(request::getRemoteAddr);
-        return new SecurityContextData(ip, Optional.ofNullable(request.getHeader("User-Agent")).orElse("unknown"));
+        String userAgent = Optional.ofNullable(request.getHeader("User-Agent")).orElse("unknown");
+        String deviceInfo = Optional.ofNullable(request.getHeader("X-Device-Info")).orElse(userAgent);
+        return new SecurityContextData(ip, userAgent, deviceInfo);
     }
 
     static Optional<String> bearerOrCookie(HttpServletRequest request) {
-        String authorization = request.getHeader("Authorization");
-        if (authorization != null && authorization.startsWith("Bearer ")) {
-            return Optional.of(authorization.substring("Bearer ".length()).trim()).filter(value -> !value.isBlank());
+        Optional<String> bearer = bearerToken(request);
+        if (bearer.isPresent()) {
+            return bearer;
         }
         Cookie[] cookies = request.getCookies();
         if (cookies == null) {
@@ -34,5 +36,13 @@ final class ApiSecurity {
             .map(Cookie::getValue)
             .filter(value -> !value.isBlank())
             .findFirst();
+    }
+
+    static Optional<String> bearerToken(HttpServletRequest request) {
+        String authorization = request.getHeader("Authorization");
+        if (authorization != null && authorization.startsWith("Bearer ")) {
+            return Optional.of(authorization.substring("Bearer ".length()).trim()).filter(value -> !value.isBlank());
+        }
+        return Optional.empty();
     }
 }

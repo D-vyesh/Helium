@@ -6,7 +6,11 @@ import java.util.UUID;
 public interface SessionPort {
     Optional<SessionView> validate(String rawToken);
 
+    RefreshTokenRotationResult rotate(String rawToken, SecurityContextData securityContext);
+
     void logout(String rawToken, SecurityContextData securityContext);
+
+    void logoutAll(String rawToken, SecurityContextData securityContext);
 
     void revokeAll(UUID userId, String reason, SecurityContextData securityContext);
 }

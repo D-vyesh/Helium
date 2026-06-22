@@ -1,5 +1,8 @@
 "use client";
 
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/table";
 import { EmptyState, ErrorState, FieldError, LoadingState } from "@/components/ui/state";
 import { orderEntrySchema } from "@/features/auth/schemas";
@@ -10,6 +13,7 @@ import { shortDate } from "@/lib/utils/format";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
+import { cn } from "@/lib/utils/cn";
 import type { z } from "zod";
 
 type OrderEntryValues = z.infer<typeof orderEntrySchema>;
@@ -33,28 +37,42 @@ export function OrderEntryForm({ market }: Readonly<{ market: string }>) {
   });
 
   return (
-    <form className="rounded border border-slate-800 bg-slate-900 p-4" onSubmit={form.handleSubmit((values) => mutation.mutate({ ...values, market }))}>
-      <h2 className="mb-4 text-lg font-semibold">Order Entry</h2>
-      <div className="grid grid-cols-2 gap-2">
-        <button className="rounded bg-emerald-400 px-3 py-2 text-sm font-semibold text-slate-950" type="button" onClick={() => form.setValue("side", "BUY")}>Buy</button>
-        <button className="rounded bg-red-400 px-3 py-2 text-sm font-semibold text-slate-950" type="button" onClick={() => form.setValue("side", "SELL")}>Sell</button>
+    <form className="glass-panel rounded-lg p-4" onSubmit={form.handleSubmit((values) => mutation.mutate({ ...values, market }))}>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold">Order Entry</h2>
+        <Badge tone="info">{market}</Badge>
+      </div>
+      <div className="grid grid-cols-2 gap-1 rounded-md border border-border bg-black/20 p-1" role="group" aria-label="Order side">
+        {(["BUY", "SELL"] as const).map((side) => (
+          <button
+            className={cn(
+              "h-9 rounded-sm text-sm font-semibold transition",
+              form.watch("side") === side ? (side === "BUY" ? "bg-emerald-400 text-slate-950" : "bg-red-400 text-slate-950") : "text-muted-foreground hover:bg-white/8"
+            )}
+            key={side}
+            type="button"
+            onClick={() => form.setValue("side", side)}
+          >
+            {side === "BUY" ? "Buy" : "Sell"}
+          </button>
+        ))}
       </div>
       <div className="mt-4 space-y-3">
         <label className="block text-sm">
           Price
-          <input className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2" {...form.register("price")} />
+          <input className="mt-1 h-10 w-full rounded-md border border-border bg-black/20 px-3 font-mono text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" {...form.register("price")} />
           <FieldError message={form.formState.errors.price?.message} />
         </label>
         <label className="block text-sm">
           Quantity
-          <input className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2" {...form.register("quantity")} />
+          <input className="mt-1 h-10 w-full rounded-md border border-border bg-black/20 px-3 font-mono text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" {...form.register("quantity")} />
           <FieldError message={form.formState.errors.quantity?.message} />
         </label>
       </div>
       {mutation.isError ? <p className="mt-3 text-sm text-red-300">Order placement failed.</p> : null}
-      <button className="mt-4 w-full rounded bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950" disabled={mutation.isPending} type="submit">
+      <Button className="mt-4 w-full" disabled={mutation.isPending} type="submit">
         Place limit order
-      </button>
+      </Button>
     </form>
   );
 }
@@ -79,8 +97,8 @@ export function OpenOrders() {
         order.price,
         order.quantity,
         order.filled,
-        order.status,
-        <button className="rounded border border-slate-700 px-3 py-1 text-xs" disabled={cancel.isPending} key={order.id} onClick={() => cancel.mutate(order.id)} type="button">Cancel</button>
+        <Badge key="status" tone={order.status === "OPEN" ? "success" : "warning"}>{order.status}</Badge>,
+        <Button disabled={cancel.isPending} key={order.id} onClick={() => cancel.mutate(order.id)} size="sm" type="button" variant="secondary">Cancel</Button>
       ])}
     />
   );
@@ -114,8 +132,8 @@ export function TradeHistory() {
 
 export function BalancesPanel() {
   return (
-    <section className="rounded border border-slate-800 bg-slate-900 p-4">
-      <h2 className="mb-3 text-lg font-semibold">Balances</h2>
+    <section className="space-y-3">
+      <h2 className="text-sm font-semibold text-muted-foreground">Balances</h2>
       <AssetList />
     </section>
   );
@@ -128,23 +146,25 @@ export function PositionSummary({ market }: Readonly<{ market: string }>) {
   const item = query.data;
   if (!item) return <EmptyState title="No position summary" />;
   return (
-    <section className="rounded border border-slate-800 bg-slate-900 p-4">
-      <h2 className="mb-3 text-lg font-semibold">Position Summary</h2>
-      <div className="grid gap-3 text-sm md:grid-cols-2">
+    <Card>
+      <CardHeader>
+        <CardTitle>Position Summary</CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-3 text-sm md:grid-cols-2">
         <Metric label="Base" value={item.baseBalance} />
         <Metric label="Quote" value={item.quoteBalance} />
         <Metric label="Open buy" value={item.openBuyNotional} />
         <Metric label="Open sell" value={item.openSellQuantity} />
-      </div>
-    </section>
+      </CardContent>
+    </Card>
   );
 }
 
 function Metric({ label, value }: Readonly<{ label: string; value: string }>) {
   return (
-    <div className="rounded bg-slate-950 p-3">
-      <p className="text-xs uppercase text-slate-500">{label}</p>
-      <p className="mt-1 font-medium">{value}</p>
+    <div className="rounded-md border border-border/70 bg-black/20 p-3">
+      <p className="text-micro font-semibold uppercase text-muted-foreground">{label}</p>
+      <p className="mt-1 font-mono font-medium text-foreground">{value}</p>
     </div>
   );
 }

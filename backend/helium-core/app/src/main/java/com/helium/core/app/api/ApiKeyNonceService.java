@@ -8,6 +8,7 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -48,9 +49,13 @@ public class ApiKeyNonceService {
         if (nonce == null || nonce.isBlank()) {
             return false;
         }
-        return redisTemplate
-            .map(template -> validateWithRedis(template, keyId, nonce))
-            .orElseGet(() -> validateWithPostgres(keyId, nonce));
+        try {
+            return redisTemplate
+                .map(template -> validateWithRedis(template, keyId, nonce))
+                .orElseGet(() -> validateWithPostgres(keyId, nonce));
+        } catch (DataAccessException exception) {
+            return validateWithPostgres(keyId, nonce);
+        }
     }
 
     private boolean validateWithRedis(StringRedisTemplate template, String keyId, String nonce) {

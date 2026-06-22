@@ -1,28 +1,51 @@
 "use client";
 
+import {
+  CandlestickChart,
+  MarketTicker,
+  OrderBook as ExchangeOrderBook,
+  PriceChangeBadge,
+  RecentTrades as ExchangeRecentTrades
+} from "@/components/exchange/exchange-components";
+import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/table";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
+import { Search } from "@/components/ui/search";
 import { heliumApi } from "@/lib/api/client";
 import { queryKeys } from "@/lib/query/keys";
+import { cn } from "@/lib/utils/cn";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useMemo, useState } from "react";
 
 export function MarketList() {
   const query = useQuery({ queryKey: queryKeys.markets, queryFn: heliumApi.markets });
+  const [search, setSearch] = useState("");
+  const markets = useMemo(
+    () => (query.data ?? []).filter((market) => market.symbol.toLowerCase().includes(search.toLowerCase())),
+    [query.data, search]
+  );
   if (query.isLoading) return <LoadingState label="Loading markets" />;
   if (query.isError) return <ErrorState title="Could not load markets" />;
   if (!query.data?.length) return <EmptyState title="No markets listed" />;
   return (
-    <DataTable
-      columns={["Market", "Last Price", "24h Change", "24h Volume", "Status"]}
-      rows={query.data.map((market) => [
-        <Link className="font-medium text-cyan-300" href={`/trade?symbol=${market.symbol}`} key={market.symbol}>{market.symbol}</Link>,
-        market.lastPrice,
-        <span className={market.change24h.startsWith("-") ? "text-red-300" : "text-emerald-300"} key="change">{market.change24h}</span>,
-        market.volume24h,
-        market.enabled ? "Enabled" : "Disabled"
-      ])}
-    />
+    <div className="space-y-4">
+      <MarketTicker markets={query.data} />
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <Search className="max-w-sm" onChange={(event) => setSearch(event.target.value)} placeholder="Search markets" value={search} />
+        <Badge tone="info">{markets.length} instruments</Badge>
+      </div>
+      <DataTable
+        columns={["Market", "Last Price", "24h Change", "24h Volume", "Status"]}
+        rows={markets.map((market) => [
+          <Link className="font-semibold text-cyan-200 hover:text-cyan-100" href={`/trade?symbol=${market.symbol}`} key={market.symbol}>{market.symbol}</Link>,
+          <span className="font-mono" key="price">{market.lastPrice}</span>,
+          <PriceChangeBadge key="change" value={market.change24h} />,
+          <span className="font-mono text-slate-300" key="volume">{market.volume24h}</span>,
+          <Badge key="status" tone={market.enabled ? "success" : "warning"}>{market.enabled ? "Online" : "Paused"}</Badge>
+        ])}
+      />
+    </div>
   );
 }
 
@@ -30,10 +53,13 @@ export function MarketSelector({ selected }: Readonly<{ selected: string }>) {
   const query = useQuery({ queryKey: queryKeys.markets, queryFn: heliumApi.markets });
   if (query.isLoading) return <LoadingState label="Markets" />;
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap gap-2" aria-label="Market selector">
       {(query.data ?? []).map((market) => (
         <Link
-          className={`rounded px-3 py-2 text-sm ${selected === market.symbol ? "bg-cyan-400 text-slate-950" : "border border-slate-700 text-slate-200"}`}
+          className={cn(
+            "rounded-md border border-border bg-white/5 px-3 py-2 text-sm font-semibold text-muted-foreground transition hover:bg-white/10 hover:text-foreground",
+            selected === market.symbol && "border-cyan-300/30 bg-cyan-300/15 text-cyan-100 shadow-glow-cyan"
+          )}
           href={`/trade?symbol=${market.symbol}`}
           key={market.symbol}
         >
@@ -48,15 +74,7 @@ export function OrderBook({ symbol }: Readonly<{ symbol: string }>) {
   const query = useQuery({ queryKey: queryKeys.orderBook(symbol), queryFn: () => heliumApi.orderBook(symbol), refetchInterval: 3000 });
   if (query.isLoading) return <LoadingState label="Loading order book" />;
   if (query.isError) return <ErrorState title="Could not load order book" />;
-  return (
-    <section className="rounded border border-slate-800 bg-slate-900 p-4">
-      <h2 className="mb-3 text-lg font-semibold">Order Book</h2>
-      <div className="grid gap-4 md:grid-cols-2">
-        <BookSide title="Bids" rows={query.data?.bids ?? []} tone="text-emerald-300" />
-        <BookSide title="Asks" rows={query.data?.asks ?? []} tone="text-red-300" />
-      </div>
-    </section>
-  );
+  return <ExchangeOrderBook asks={query.data?.asks ?? []} bids={query.data?.bids ?? []} />;
 }
 
 export function RecentTrades({ symbol }: Readonly<{ symbol: string }>) {
@@ -64,57 +82,14 @@ export function RecentTrades({ symbol }: Readonly<{ symbol: string }>) {
   if (query.isLoading) return <LoadingState label="Loading trades" />;
   if (query.isError) return <ErrorState title="Could not load trades" />;
   if (!query.data?.length) return <EmptyState title="No recent trades" />;
-  return (
-    <section className="rounded border border-slate-800 bg-slate-900 p-4">
-      <h2 className="mb-3 text-lg font-semibold">Recent Trades</h2>
-      <div className="space-y-2 text-sm">
-        {query.data.map((trade) => (
-          <div className="grid grid-cols-4 gap-2" key={trade.id}>
-            <span className={trade.side === "BUY" ? "text-emerald-300" : "text-red-300"}>{trade.price}</span>
-            <span>{trade.quantity}</span>
-            <span>{trade.side}</span>
-            <span className="text-slate-500">{trade.time}</span>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
+  return <ExchangeRecentTrades trades={query.data} />;
 }
 
 export function CandlestickPlaceholder({ symbol }: Readonly<{ symbol: string }>) {
   const query = useQuery({ queryKey: queryKeys.candles(symbol), queryFn: () => heliumApi.candles(symbol) });
   const candles = query.data ?? [];
+  if (query.isLoading) return <LoadingState label="Loading candles" />;
   return (
-    <section className="rounded border border-slate-800 bg-slate-900 p-4">
-      <h2 className="mb-3 text-lg font-semibold">Candles</h2>
-      <div className="flex h-56 items-end gap-2 border-b border-l border-slate-700 px-3 pb-3">
-        {candles.map((candle) => {
-          const height = Math.max(24, Math.min(180, Number(candle.volume) * 7));
-          return (
-            <div className="flex flex-1 flex-col items-center gap-2" key={candle.time}>
-              <div className="w-full rounded-t bg-cyan-400/70" style={{ height }} />
-              <span className="text-[10px] text-slate-500">{candle.time}</span>
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function BookSide({ title, rows, tone }: Readonly<{ title: string; rows: { price: string; quantity: string; total: string }[]; tone: string }>) {
-  return (
-    <div>
-      <p className="mb-2 text-sm font-medium text-slate-400">{title}</p>
-      <div className="space-y-1 text-sm">
-        {rows.map((row) => (
-          <div className="grid grid-cols-3 gap-2" key={`${title}-${row.price}`}>
-            <span className={tone}>{row.price}</span>
-            <span>{row.quantity}</span>
-            <span className="text-slate-400">{row.total}</span>
-          </div>
-        ))}
-      </div>
-    </div>
+    <CandlestickChart candles={candles} />
   );
 }

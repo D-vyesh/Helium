@@ -64,6 +64,8 @@ helium:
     signature-ttl: ${HELIUM_API_KEY_SIGNATURE_TTL:5m}
     nonce-ttl: ${HELIUM_API_KEY_NONCE_TTL:10m}
     default-lifetime: ${HELIUM_API_KEY_DEFAULT_LIFETIME:90d}
+  auth:
+    jwt-secret: ${HELIUM_JWT_SECRET:local-development-jwt-secret-change-me-minimum-32-bytes}
   outbox:
     enabled: ${HELIUM_OUTBOX_ENABLED:true}
     poll-interval-ms: ${HELIUM_OUTBOX_POLL_INTERVAL_MS:1000}

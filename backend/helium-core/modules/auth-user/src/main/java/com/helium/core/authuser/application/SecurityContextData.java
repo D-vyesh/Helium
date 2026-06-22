@@ -2,10 +2,15 @@ package com.helium.core.authuser.application;
 
 import java.util.Objects;
 
-public record SecurityContextData(String ipAddress, String userAgent) {
+public record SecurityContextData(String ipAddress, String userAgent, String deviceInfo) {
+    public SecurityContextData(String ipAddress, String userAgent) {
+        this(ipAddress, userAgent, userAgent);
+    }
+
     public SecurityContextData {
         ipAddress = requireText(ipAddress, "ipAddress");
         userAgent = requireText(userAgent, "userAgent");
+        deviceInfo = requireText(deviceInfo, "deviceInfo");
     }
 
     public static SecurityContextData system() {

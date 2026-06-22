@@ -2,8 +2,6 @@ package com.helium.core.authuser.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
@@ -19,9 +17,8 @@ public class SecurityAuditEvent {
     @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
-    @Enumerated(EnumType.STRING)
     @Column(name = "event_type", nullable = false, updatable = false, length = 60)
-    private SecurityAuditEventType eventType;
+    private String eventType;
 
     @Column(name = "user_id", updatable = false)
     private UUID userId;
@@ -58,7 +55,7 @@ public class SecurityAuditEvent {
         Instant occurredAt
     ) {
         this.id = UUID.randomUUID();
-        this.eventType = Objects.requireNonNull(eventType, "eventType");
+        this.eventType = Objects.requireNonNull(eventType, "eventType").code();
         this.userId = userId;
         this.sessionId = sessionId;
         this.actorId = requireText(actorId, "actorId", 120);

@@ -1,6 +1,10 @@
 package com.helium.core.authuser.domain;
 
 public enum SecurityAuditEventType {
+    AUTH_SIGNUP("AUTH.SIGNUP"),
+    AUTH_EMAIL_VERIFIED("AUTH.EMAIL_VERIFIED"),
+    AUTH_LOGIN_SUCCESS("AUTH.LOGIN_SUCCESS"),
+    AUTH_LOGIN_FAILED("AUTH.LOGIN_FAILED"),
     USER_REGISTERED,
     EMAIL_VERIFICATION_ISSUED,
     EMAIL_VERIFIED,
@@ -16,5 +20,19 @@ public enum SecurityAuditEventType {
     PASSWORD_RESET_COMPLETED,
     PASSWORD_CHANGED,
     ROLE_GRANTED,
-    ROLE_REVOKED
+    ROLE_REVOKED;
+
+    private final String code;
+
+    SecurityAuditEventType() {
+        this.code = name();
+    }
+
+    SecurityAuditEventType(String code) {
+        this.code = code;
+    }
+
+    public String code() {
+        return code;
+    }
 }

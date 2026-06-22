@@ -3,7 +3,6 @@ package com.helium.core.authuser.application;
 import com.helium.core.authuser.domain.UserAccount;
 import java.util.Objects;
 import java.util.UUID;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -31,17 +30,13 @@ public class RegistrationService implements RegistrationPort {
         String passwordHash = passwordHasher.hash(command.password());
         TokenValue token = tokenCodec.generate();
 
-        try {
-            UUID userId = transactionService.register(
-                email,
-                command.displayName(),
-                passwordHash,
-                token.tokenHash(),
-                command.securityContext()
-            );
-            return new RegistrationResult(userId, token.rawToken());
-        } catch (DataIntegrityViolationException exception) {
-            return new RegistrationResult(UUID.randomUUID(), token.rawToken());
-        }
+        UUID userId = transactionService.register(
+            email,
+            command.displayName(),
+            passwordHash,
+            token.tokenHash(),
+            command.securityContext()
+        );
+        return new RegistrationResult(userId, token.rawToken());
     }
 }

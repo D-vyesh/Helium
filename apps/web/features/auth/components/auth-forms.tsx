@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { FieldError } from "@/components/ui/state";
 import { heliumApi } from "@/lib/api/client";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -33,21 +35,21 @@ export function LoginForm() {
       <form className="space-y-4" onSubmit={form.handleSubmit((values) => login.mutate(values))}>
         <label className="block text-sm">
           Email
-          <input className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2" {...form.register("email")} />
+          <input className="mt-1 h-10 w-full rounded-md border border-border bg-black/20 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" {...form.register("email")} />
           <FieldError message={form.formState.errors.email?.message} />
         </label>
         <label className="block text-sm">
           Password
-          <input className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2" type="password" {...form.register("password")} />
+          <input className="mt-1 h-10 w-full rounded-md border border-border bg-black/20 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" type="password" {...form.register("password")} />
           <FieldError message={form.formState.errors.password?.message} />
         </label>
         {login.isError ? <p className="text-sm text-red-300">Authentication failed.</p> : null}
-        <button className="w-full rounded bg-cyan-400 px-4 py-2 font-semibold text-slate-950" disabled={login.isPending} type="submit">
+        <Button className="w-full" disabled={login.isPending} type="submit">
           {login.isPending ? "Signing in" : "Sign in"}
-        </button>
+        </Button>
       </form>
-      <p className="mt-4 text-sm text-slate-400">
-        New to HELIUM? <Link className="text-cyan-300" href="/register">Create an account</Link>
+      <p className="mt-4 text-sm text-muted-foreground">
+        New to HELIUM? <Link className="text-cyan-200" href="/register">Create an account</Link>
       </p>
     </AuthPanel>
   );
@@ -70,22 +72,22 @@ export function RegisterForm() {
       <form className="space-y-4" onSubmit={form.handleSubmit((values) => register.mutate(values))}>
         <label className="block text-sm">
           Display name
-          <input className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2" {...form.register("displayName")} />
+          <input className="mt-1 h-10 w-full rounded-md border border-border bg-black/20 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" {...form.register("displayName")} />
           <FieldError message={form.formState.errors.displayName?.message} />
         </label>
         <label className="block text-sm">
           Email
-          <input className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2" {...form.register("email")} />
+          <input className="mt-1 h-10 w-full rounded-md border border-border bg-black/20 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" {...form.register("email")} />
           <FieldError message={form.formState.errors.email?.message} />
         </label>
         <label className="block text-sm">
           Password
-          <input className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2" type="password" {...form.register("password")} />
+          <input className="mt-1 h-10 w-full rounded-md border border-border bg-black/20 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" type="password" {...form.register("password")} />
           <FieldError message={form.formState.errors.password?.message} />
         </label>
-        <button className="w-full rounded bg-cyan-400 px-4 py-2 font-semibold text-slate-950" disabled={register.isPending} type="submit">
+        <Button className="w-full" disabled={register.isPending} type="submit">
           {register.isPending ? "Creating account" : "Create account"}
-        </button>
+        </Button>
       </form>
     </AuthPanel>
   );
@@ -100,13 +102,13 @@ export function PasswordResetForm() {
       <form className="space-y-4" onSubmit={form.handleSubmit((values) => reset.mutate(values))}>
         <label className="block text-sm">
           Email
-          <input className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2" {...form.register("email")} />
+          <input className="mt-1 h-10 w-full rounded-md border border-border bg-black/20 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" {...form.register("email")} />
           <FieldError message={form.formState.errors.email?.message} />
         </label>
         {reset.isSuccess ? <p className="text-sm text-emerald-300">If the account exists, reset instructions are queued.</p> : null}
-        <button className="w-full rounded bg-cyan-400 px-4 py-2 font-semibold text-slate-950" disabled={reset.isPending} type="submit">
+        <Button className="w-full" disabled={reset.isPending} type="submit">
           Send reset link
-        </button>
+        </Button>
       </form>
     </AuthPanel>
   );
@@ -121,13 +123,13 @@ export function EmailVerificationForm() {
       <form className="space-y-4" onSubmit={form.handleSubmit((values) => verify.mutate(values))}>
         <label className="block text-sm">
           Verification token
-          <input className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2" {...form.register("token")} />
+          <input className="mt-1 h-10 w-full rounded-md border border-border bg-black/20 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" {...form.register("token")} />
           <FieldError message={form.formState.errors.token?.message} />
         </label>
         {verify.isSuccess ? <p className="text-sm text-emerald-300">Email verified.</p> : null}
-        <button className="w-full rounded bg-cyan-400 px-4 py-2 font-semibold text-slate-950" disabled={verify.isPending} type="submit">
+        <Button className="w-full" disabled={verify.isPending} type="submit">
           Verify email
-        </button>
+        </Button>
       </form>
     </AuthPanel>
   );
@@ -135,12 +137,15 @@ export function EmailVerificationForm() {
 
 function AuthPanel({ title, children, footer }: Readonly<{ title: string; children: React.ReactNode; footer?: React.ReactNode }>) {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-slate-100">
-      <section className="w-full max-w-md rounded border border-slate-800 bg-slate-900 p-6">
-        <h1 className="text-2xl font-semibold">{title}</h1>
-        <div className="mt-6">{children}</div>
-        {footer ? <div className="mt-4 text-sm text-cyan-300">{footer}</div> : null}
-      </section>
+    <main className="flex min-h-screen items-center justify-center px-6 text-foreground">
+      <Card className="w-full max-w-md">
+        <CardContent className="p-6">
+          <p className="text-micro font-semibold uppercase text-cyan-200/80">HELIUM Access</p>
+          <h1 className="mt-2 text-display-md">{title}</h1>
+          <div className="mt-6">{children}</div>
+          {footer ? <div className="mt-4 text-sm text-cyan-200">{footer}</div> : null}
+        </CardContent>
+      </Card>
     </main>
   );
 }

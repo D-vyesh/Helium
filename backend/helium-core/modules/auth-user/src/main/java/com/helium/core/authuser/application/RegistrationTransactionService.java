@@ -2,6 +2,7 @@ package com.helium.core.authuser.application;
 
 import com.helium.core.authuser.domain.Credential;
 import com.helium.core.authuser.domain.EmailVerificationToken;
+import com.helium.core.authuser.domain.AuthValidationException;
 import com.helium.core.authuser.domain.Role;
 import com.helium.core.authuser.domain.RoleGrant;
 import com.helium.core.authuser.domain.SecurityAuditEventType;
@@ -53,6 +54,9 @@ public class RegistrationTransactionService {
         SecurityContextData securityContext
     ) {
         Instant now = clock.instant();
+        if (userAccountRepository.findByEmailForUpdate(email).isPresent()) {
+            throw new AuthValidationException("email is already registered");
+        }
         UserAccount account = UserAccount.register(email, displayName, now);
         userAccountRepository.saveAndFlush(account);
         credentialRepository.save(Credential.create(account.id(), passwordHash, now));
@@ -63,7 +67,7 @@ public class RegistrationTransactionService {
             VERIFICATION_TOKEN_LIFETIME,
             now
         ));
-        auditService.record(SecurityAuditEventType.USER_REGISTERED, account.id(), null, securityContext, "user registered");
+        auditService.record(SecurityAuditEventType.AUTH_SIGNUP, account.id(), null, securityContext, "user registered");
         auditService.record(
             SecurityAuditEventType.EMAIL_VERIFICATION_ISSUED,
             account.id(),
