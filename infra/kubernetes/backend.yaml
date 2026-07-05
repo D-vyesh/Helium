@@ -41,7 +41,7 @@ spec:
                 topologyKey: kubernetes.io/hostname
       containers:
         - name: backend
-          image: ghcr.io/helium-exchange/helium-backend:latest
+          image: ghcr.io/d-vyesh/helium-backend:latest
           ports:
             - containerPort: 8080
               name: http

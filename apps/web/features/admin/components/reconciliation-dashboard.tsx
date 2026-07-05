@@ -5,19 +5,21 @@ import { useQuery } from "@tanstack/react-query";
 import { DataTable } from "@/components/ui/table";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
 import { heliumApi } from "@/lib/api/client";
+import { errorMessage } from "@/lib/api/errors";
 import type { ReconciliationDiscrepancy, ReconciliationReport } from "@/lib/api/types";
 import { queryKeys } from "@/lib/query/keys";
-
-type StatusFilter = "ALL" | ReconciliationReport["status"];
+import { formatAmount } from "@/lib/utils/format";
 
 export function ReconciliationDashboard() {
-  const [status, setStatus] = useState<StatusFilter>("ALL");
+  const [status, setStatus] = useState("ALL");
   const [query, setQuery] = useState("");
+  const [exportError, setExportError] = useState<string | null>(null);
   const reportsQuery = useQuery({ queryKey: queryKeys.reconciliationReports, queryFn: heliumApi.reconciliationReports });
   const discrepanciesQuery = useQuery({ queryKey: queryKeys.reconciliationDiscrepancies, queryFn: heliumApi.reconciliationDiscrepancies });
 
   const reports = useMemo(() => reportsQuery.data ?? [], [reportsQuery.data]);
   const discrepancies = useMemo(() => discrepanciesQuery.data ?? [], [discrepanciesQuery.data]);
+  const statuses = useMemo(() => [...new Set(reports.map((report) => report.status))], [reports]);
   const filteredReports = useMemo(
     () => reports.filter((report) => {
       const matchesStatus = status === "ALL" || report.status === status;
@@ -31,8 +33,18 @@ export function ReconciliationDashboard() {
     return <LoadingState label="Loading reconciliation reports" />;
   }
 
-  if (reportsQuery.isError || discrepanciesQuery.isError) {
-    return <ErrorState title="Reconciliation unavailable" detail="The reconciliation workspace could not load reports." />;
+  const failed = [reportsQuery, discrepanciesQuery].find((item) => item.isError);
+  if (failed) {
+    return (
+      <ErrorState
+        title="Reconciliation unavailable"
+        error={failed.error}
+        onRetry={() => {
+          void reportsQuery.refetch();
+          void discrepanciesQuery.refetch();
+        }}
+      />
+    );
   }
 
   return (
@@ -41,7 +53,7 @@ export function ReconciliationDashboard() {
         <Metric title="Reports" value={String(reports.length)} />
         <Metric title="Discrepancies" value={String(discrepancies.length)} />
         <Metric title="Clean" value={String(reports.filter((report) => report.status === "CLEAN").length)} />
-        <Metric title="Open Review" value={String(discrepancies.filter((discrepancy) => discrepancy.status !== "RESOLVED").length)} />
+        <Metric title="With difference" value={String(reports.filter((report) => report.difference !== 0).length)} />
       </div>
       <section className="rounded border border-slate-800 bg-slate-900 p-4">
         <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -56,22 +68,31 @@ export function ReconciliationDashboard() {
             <select
               className="h-10 rounded border border-slate-700 bg-slate-950 px-3 text-sm outline-none focus:border-cyan-400"
               value={status}
-              onChange={(event) => setStatus(event.target.value as StatusFilter)}
+              onChange={(event) => setStatus(event.target.value)}
             >
               <option value="ALL">All statuses</option>
-              <option value="CLEAN">Clean</option>
-              <option value="DISCREPANCY">Discrepancy</option>
+              {statuses.map((value) => (
+                <option key={value} value={value}>{value}</option>
+              ))}
             </select>
             <button
               className="h-10 rounded bg-cyan-400 px-4 text-sm font-semibold text-slate-950"
               type="button"
-              onClick={() => void exportCsv()}
+              onClick={() => {
+                setExportError(null);
+                exportCsv().catch((error: unknown) => setExportError(errorMessage(error)));
+              }}
             >
               Export CSV
             </button>
           </div>
         </div>
-        {filteredReports.length === 0 ? <EmptyState title="No reports found" detail="Adjust filters to inspect another reconciliation scope." /> : <ReportTable reports={filteredReports} />}
+        {exportError ? <ErrorState title="CSV export failed" detail={exportError} /> : null}
+        {filteredReports.length === 0 ? (
+          <EmptyState title="No reports found" detail="Run the daily reconciliation on the backend or adjust filters." />
+        ) : (
+          <ReportTable reports={filteredReports} />
+        )}
       </section>
       <DiscrepancyTable discrepancies={discrepancies} />
     </div>
@@ -81,13 +102,13 @@ export function ReconciliationDashboard() {
 function ReportTable({ reports }: Readonly<{ reports: ReconciliationReport[] }>) {
   return (
     <DataTable
-      columns={["Type", "Scope", "Status", "Totals", "Difference"]}
+      columns={["Type", "Scope", "Status", "Difference", "Created"]}
       rows={reports.map((report) => [
         <span key="type">{report.type.replaceAll("_", " ")}</span>,
         <span key="scope" className="font-mono text-xs">{report.scope}</span>,
         <Badge key="status" value={report.status} />,
-        <span key="totals">{report.leftTotal} / {report.rightTotal}</span>,
-        <span key="difference" className={report.status === "DISCREPANCY" ? "text-amber-300" : "text-slate-300"}>{report.difference}</span>
+        <span key="difference" className={report.difference !== 0 ? "text-amber-300" : "text-slate-300"}>{formatAmount(report.difference)}</span>,
+        <span key="created">{new Date(report.createdAt).toLocaleString()}</span>
       ])}
     />
   );
@@ -96,18 +117,18 @@ function ReportTable({ reports }: Readonly<{ reports: ReconciliationReport[] }>)
 function DiscrepancyTable({ discrepancies }: Readonly<{ discrepancies: ReconciliationDiscrepancy[] }>) {
   return (
     <section className="rounded border border-slate-800 bg-slate-900 p-4">
-      <h2 className="mb-3 text-lg font-semibold">Manual reconciliation workflow</h2>
+      <h2 className="mb-3 text-lg font-semibold">Discrepancies</h2>
       {discrepancies.length === 0 ? (
         <EmptyState title="No discrepancies" detail="New mismatches will appear here for manual review." />
       ) : (
         <DataTable
-          columns={["Severity", "Scope", "Difference", "Status", "Details"]}
+          columns={["Severity", "Scope", "Difference", "Details", "Detected"]}
           rows={discrepancies.map((discrepancy) => [
             <Badge key="severity" value={discrepancy.severity} />,
             <span key="scope" className="font-mono text-xs">{discrepancy.scope}</span>,
-            <span key="difference">{discrepancy.difference}</span>,
-            <Badge key="status" value={discrepancy.status} />,
-            <span key="details">{discrepancy.details}</span>
+            <span key="difference">{formatAmount(discrepancy.difference)}</span>,
+            <span key="details">{discrepancy.details}</span>,
+            <span key="detected">{new Date(discrepancy.detectedAt).toLocaleString()}</span>
           ])}
         />
       )}

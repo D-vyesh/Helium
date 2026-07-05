@@ -1,3 +1,7 @@
+"use client";
+
+import { errorMessage } from "@/lib/api/errors";
+import { Button } from "./button";
 import { Card, CardContent } from "./card";
 import { Skeleton } from "./skeleton";
 
@@ -24,12 +28,36 @@ export function EmptyState({ title, detail }: Readonly<{ title: string; detail?:
   );
 }
 
-export function ErrorState({ title = "Something went wrong", detail }: Readonly<{ title?: string; detail?: string }>) {
+export function ErrorState({
+  title = "Something went wrong",
+  detail,
+  error,
+  onRetry
+}: Readonly<{ title?: string; detail?: string; error?: unknown; onRetry?: () => void }>) {
+  const message = detail ?? (error !== undefined ? errorMessage(error) : undefined);
   return (
     <div className="rounded-lg border border-red-400/25 bg-red-950/30 p-4 text-sm text-red-100" role="alert">
       <p className="font-semibold">{title}</p>
-      {detail ? <p className="mt-2 text-red-100/80">{detail}</p> : null}
+      {message ? <p className="mt-2 text-red-100/80">{message}</p> : null}
+      {onRetry ? (
+        <Button className="mt-3" onClick={onRetry} size="sm" type="button" variant="secondary">
+          Retry
+        </Button>
+      ) : null}
     </div>
+  );
+}
+
+export function NotImplemented({ feature }: Readonly<{ feature: string }>) {
+  return (
+    <Card className="border-dashed border-amber-400/30">
+      <CardContent className="p-6 text-sm">
+        <p className="font-semibold text-amber-200">This feature is not implemented yet.</p>
+        <p className="mt-2 text-muted-foreground">
+          {feature} has no backend endpoint. It will activate once the API exists — no placeholder data is shown.
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 

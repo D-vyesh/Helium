@@ -1,15 +1,21 @@
 import { heliumApi } from "@/lib/api/client";
-import type { AssetBalance, MarketSummary, SessionUser } from "@/lib/api/types";
+import type { Balance, MarketView, OrderBookView, OrderView, SessionUser, TickerResponse } from "@/lib/api/types";
 
 async function apiClientContracts() {
   const session: SessionUser = await heliumApi.session();
-  const balances: AssetBalance[] = await heliumApi.balances();
-  const markets: MarketSummary[] = await heliumApi.markets();
+  const balances: Balance[] = await heliumApi.balances();
+  const markets: MarketView[] = await heliumApi.markets();
+  const ticker: TickerResponse = await heliumApi.ticker("BTC-USD");
+  const book: OrderBookView = await heliumApi.orderBook("BTC-USD");
+  const orders: OrderView[] = await heliumApi.openOrders();
 
   return {
     sessionEmail: session.email,
     balanceCount: balances.length,
-    marketCount: markets.length
+    marketCount: markets.length,
+    lastPrice: ticker.lastPrice,
+    bidCount: book.bids.length,
+    openOrderCount: orders.length
   };
 }
 

@@ -4,10 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { FieldError } from "@/components/ui/state";
 import { heliumApi } from "@/lib/api/client";
+import { errorMessage } from "@/lib/api/errors";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import type { z } from "zod";
 import { emailVerificationSchema, loginSchema, passwordResetSchema, registerSchema } from "../schemas";
@@ -18,14 +19,17 @@ type RegisterValues = z.infer<typeof registerSchema>;
 type PasswordResetValues = z.infer<typeof passwordResetSchema>;
 type EmailVerificationValues = z.infer<typeof emailVerificationSchema>;
 
+const inputClassName =
+  "mt-1 h-10 w-full rounded-md border border-border bg-black/20 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
+
 export function LoginForm() {
   const router = useRouter();
-  const setUser = useAuthStore((state) => state.setUser);
+  const startSession = useAuthStore((state) => state.startSession);
   const form = useForm<LoginValues>({ resolver: zodResolver(loginSchema), defaultValues: { email: "", password: "" } });
   const login = useMutation({
     mutationFn: heliumApi.login,
-    onSuccess: (user) => {
-      setUser(user);
+    onSuccess: (response) => {
+      startSession(response);
       router.push("/dashboard");
     }
   });
@@ -35,15 +39,15 @@ export function LoginForm() {
       <form className="space-y-4" onSubmit={form.handleSubmit((values) => login.mutate(values))}>
         <label className="block text-sm">
           Email
-          <input className="mt-1 h-10 w-full rounded-md border border-border bg-black/20 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" {...form.register("email")} />
+          <input className={inputClassName} {...form.register("email")} />
           <FieldError message={form.formState.errors.email?.message} />
         </label>
         <label className="block text-sm">
           Password
-          <input className="mt-1 h-10 w-full rounded-md border border-border bg-black/20 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" type="password" {...form.register("password")} />
+          <input className={inputClassName} type="password" {...form.register("password")} />
           <FieldError message={form.formState.errors.password?.message} />
         </label>
-        {login.isError ? <p className="text-sm text-red-300">Authentication failed.</p> : null}
+        {login.isError ? <p className="text-sm text-red-300">{errorMessage(login.error)}</p> : null}
         <Button className="w-full" disabled={login.isPending} type="submit">
           {login.isPending ? "Signing in" : "Sign in"}
         </Button>
@@ -57,13 +61,13 @@ export function LoginForm() {
 
 export function RegisterForm() {
   const router = useRouter();
-  const setUser = useAuthStore((state) => state.setUser);
   const form = useForm<RegisterValues>({ resolver: zodResolver(registerSchema), defaultValues: { displayName: "", email: "", password: "" } });
   const register = useMutation({
     mutationFn: heliumApi.register,
-    onSuccess: (user) => {
-      setUser(user);
-      router.push("/email-verification");
+    onSuccess: (response) => {
+      // The backend does not send emails yet; it returns the verification
+      // token directly. Pass it along so the user can complete verification.
+      router.push(`/email-verification?token=${encodeURIComponent(response.verificationToken)}`);
     }
   });
 
@@ -72,19 +76,20 @@ export function RegisterForm() {
       <form className="space-y-4" onSubmit={form.handleSubmit((values) => register.mutate(values))}>
         <label className="block text-sm">
           Display name
-          <input className="mt-1 h-10 w-full rounded-md border border-border bg-black/20 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" {...form.register("displayName")} />
+          <input className={inputClassName} {...form.register("displayName")} />
           <FieldError message={form.formState.errors.displayName?.message} />
         </label>
         <label className="block text-sm">
           Email
-          <input className="mt-1 h-10 w-full rounded-md border border-border bg-black/20 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" {...form.register("email")} />
+          <input className={inputClassName} {...form.register("email")} />
           <FieldError message={form.formState.errors.email?.message} />
         </label>
         <label className="block text-sm">
           Password
-          <input className="mt-1 h-10 w-full rounded-md border border-border bg-black/20 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" type="password" {...form.register("password")} />
+          <input className={inputClassName} type="password" {...form.register("password")} />
           <FieldError message={form.formState.errors.password?.message} />
         </label>
+        {register.isError ? <p className="text-sm text-red-300">{errorMessage(register.error)}</p> : null}
         <Button className="w-full" disabled={register.isPending} type="submit">
           {register.isPending ? "Creating account" : "Create account"}
         </Button>
@@ -102,12 +107,16 @@ export function PasswordResetForm() {
       <form className="space-y-4" onSubmit={form.handleSubmit((values) => reset.mutate(values))}>
         <label className="block text-sm">
           Email
-          <input className="mt-1 h-10 w-full rounded-md border border-border bg-black/20 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" {...form.register("email")} />
+          <input className={inputClassName} {...form.register("email")} />
           <FieldError message={form.formState.errors.email?.message} />
         </label>
-        {reset.isSuccess ? <p className="text-sm text-emerald-300">If the account exists, reset instructions are queued.</p> : null}
+        {reset.isSuccess ? <p className="text-sm text-emerald-300">Reset request accepted by the backend.</p> : null}
+        {reset.isError ? <p className="text-sm text-red-300">{errorMessage(reset.error)}</p> : null}
+        <p className="text-xs text-amber-200/90">
+          Note: completing a password reset is not implemented yet — the backend exposes no endpoint to submit a new password.
+        </p>
         <Button className="w-full" disabled={reset.isPending} type="submit">
-          Send reset link
+          Request reset
         </Button>
       </form>
     </AuthPanel>
@@ -115,18 +124,29 @@ export function PasswordResetForm() {
 }
 
 export function EmailVerificationForm() {
-  const form = useForm<EmailVerificationValues>({ resolver: zodResolver(emailVerificationSchema), defaultValues: { token: "" } });
-  const verify = useMutation({ mutationFn: (values: EmailVerificationValues) => heliumApi.verifyEmail(values.token) });
+  const params = useSearchParams();
+  const router = useRouter();
+  const form = useForm<EmailVerificationValues>({
+    resolver: zodResolver(emailVerificationSchema),
+    defaultValues: { token: params.get("token") ?? "" }
+  });
+  const verify = useMutation({
+    mutationFn: (values: EmailVerificationValues) => heliumApi.verifyEmail(values.token),
+    onSuccess: () => {
+      setTimeout(() => router.push("/login"), 1200);
+    }
+  });
 
   return (
     <AuthPanel title="Email Verification">
       <form className="space-y-4" onSubmit={form.handleSubmit((values) => verify.mutate(values))}>
         <label className="block text-sm">
           Verification token
-          <input className="mt-1 h-10 w-full rounded-md border border-border bg-black/20 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" {...form.register("token")} />
+          <input className={inputClassName} {...form.register("token")} />
           <FieldError message={form.formState.errors.token?.message} />
         </label>
-        {verify.isSuccess ? <p className="text-sm text-emerald-300">Email verified.</p> : null}
+        {verify.isSuccess ? <p className="text-sm text-emerald-300">Email verified. Redirecting to login…</p> : null}
+        {verify.isError ? <p className="text-sm text-red-300">{errorMessage(verify.error)}</p> : null}
         <Button className="w-full" disabled={verify.isPending} type="submit">
           Verify email
         </Button>

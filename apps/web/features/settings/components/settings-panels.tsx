@@ -1,14 +1,14 @@
 "use client";
 
-import { ErrorState, LoadingState } from "@/components/ui/state";
+import { ErrorState, LoadingState, NotImplemented } from "@/components/ui/state";
 import { heliumApi } from "@/lib/api/client";
 import { queryKeys } from "@/lib/query/keys";
 import { useQuery } from "@tanstack/react-query";
 
 export function SettingsPanel() {
-  const query = useQuery({ queryKey: queryKeys.settings, queryFn: heliumApi.settings });
-  if (query.isLoading) return <LoadingState label="Loading settings" />;
-  if (query.isError) return <ErrorState title="Could not load settings" />;
+  const query = useQuery({ queryKey: queryKeys.session, queryFn: heliumApi.session });
+  if (query.isLoading) return <LoadingState label="Loading account" />;
+  if (query.isError) return <ErrorState title="Could not load account" error={query.error} onRetry={() => void query.refetch()} />;
   const profile = query.data;
   if (!profile) return null;
   return (
@@ -18,16 +18,15 @@ export function SettingsPanel() {
         <dl className="mt-4 space-y-3 text-sm">
           <Row label="Email" value={profile.email} />
           <Row label="Display name" value={profile.displayName} />
-          <Row label="Account status" value={profile.accountStatus} />
+          <Row label="Account status" value={profile.status} />
+          <Row label="Email verified" value={profile.emailVerified ? "Yes" : "No"} />
+          <Row label="Roles" value={profile.roles.length ? profile.roles.join(", ") : "USER"} />
+          <Row label="Member since" value={new Date(profile.createdAt).toLocaleDateString()} />
         </dl>
       </section>
-      <section className="rounded border border-slate-800 bg-slate-900 p-4">
-        <h2 className="text-lg font-semibold">Security</h2>
-        <dl className="mt-4 space-y-3 text-sm">
-          <Row label="MFA" value={profile.mfaEnabled ? "Enabled" : "Not enabled"} />
-          <Row label="Sessions" value="Managed by Auth/User" />
-          <Row label="Audit" value="Security events recorded server-side" />
-        </dl>
+      <section className="space-y-4">
+        <NotImplemented feature="Profile editing (display name, password change from this screen)" />
+        <NotImplemented feature="Two-factor authentication management" />
       </section>
     </div>
   );

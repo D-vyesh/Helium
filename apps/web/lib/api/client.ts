@@ -1,106 +1,90 @@
-import {
-  asks,
-  adminAuditRecords,
-  adminMarketControls,
-  adminUsers,
-  balances,
-  betaUser,
-  bids,
-  candles,
-  depositAddresses,
-  deposits,
-  markets,
-  orders,
-  positionSummary,
-  publicTrades,
-  reconciliationDiscrepancies,
-  reconciliationReports,
-  settingsProfile,
-  tradeHistory,
-  withdrawals
-} from "./fixtures";
+import { request } from "./http";
+import { getAuthTokens } from "@/features/auth/token-store";
 import type {
   AdminAuditRecord,
   AdminMarketControl,
-  AdminUserRecord,
-  AssetBalance,
-  CandlePoint,
+  Balance,
+  CandleResponse,
   DepositAddress,
   DepositRecord,
-  MarketSummary,
-  OrderBookLevel,
-  OrderRecord,
-  PositionSummary,
+  EmailVerificationResponse,
+  LoginResponse,
+  MarketView,
+  OrderBookView,
+  OrderView,
+  PasswordResetResponse,
+  PlaceOrderBody,
+  PlaceOrderResponse,
   PublicTrade,
   ReconciliationDiscrepancy,
   ReconciliationReport,
+  RegistrationResponse,
   SessionUser,
-  SettingsProfile,
+  TickerResponse,
   TradeRecord,
-  WithdrawalRecord
+  WithdrawalRecord,
+  WithdrawalRequestBody,
+  WithdrawalView
 } from "./types";
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_HELIUM_API_BASE_URL;
-const apiPrefix = "/api/v1";
+const prefix = "/api/v1";
 
-async function request<T>(path: string, fallback: T, init?: RequestInit): Promise<T> {
-  if (!apiBaseUrl) {
-    await new Promise((resolve) => setTimeout(resolve, 80));
-    return fallback;
-  }
-
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    ...init,
-    credentials: "include",
-    headers: {
-      "content-type": "application/json",
-      ...init?.headers
-    }
-  });
-
-  if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
-  }
-
-  return (await response.json()) as T;
-}
-
+/**
+ * Real HELIUM backend client. No fixtures, no fallbacks: every call hits the
+ * backend and failures surface as typed errors (see lib/api/errors.ts).
+ */
 export const heliumApi = {
-  session: () => request<SessionUser>(`${apiPrefix}/auth/session`, betaUser),
-  login: (body: { email: string; password: string }) => request<SessionUser>(`${apiPrefix}/auth/login`, { ...betaUser, email: body.email }, { method: "POST", body: JSON.stringify(body) }),
-  register: (body: { email: string; password: string; displayName: string }) =>
-    request<SessionUser>(`${apiPrefix}/auth/register`, { ...betaUser, email: body.email, displayName: body.displayName, emailVerified: false }, { method: "POST", body: JSON.stringify(body) }),
-  logout: () => request<{ ok: true }>(`${apiPrefix}/auth/logout`, { ok: true }, { method: "POST" }),
-  requestPasswordReset: (email: string) => request<{ accepted: true }>(`${apiPrefix}/auth/password-reset`, { accepted: true }, { method: "POST", body: JSON.stringify({ email }) }),
-  verifyEmail: (token: string) => request<{ verified: true }>(`${apiPrefix}/auth/email-verification`, { verified: true }, { method: "POST", body: JSON.stringify({ token }) }),
+  // ---- Auth ----
+  session: () => request<SessionUser>(`${prefix}/auth/session`),
+  login: (body: { email: string; password: string }) =>
+    request<LoginResponse>(`${prefix}/auth/login`, { method: "POST", body, anonymous: true }),
+  register: (body: { email: string; displayName: string; password: string }) =>
+    request<RegistrationResponse>(`${prefix}/auth/register`, { method: "POST", body, anonymous: true }),
+  logout: () => {
+    const tokens = getAuthTokens();
+    if (!tokens?.refreshToken) {
+      return Promise.resolve(undefined);
+    }
+    return request<void>(`${prefix}/auth/logout`, {
+      method: "POST",
+      body: { refreshToken: tokens.refreshToken, allSessions: false },
+      skipRefresh: true
+    });
+  },
+  requestPasswordReset: (email: string) =>
+    request<PasswordResetResponse>(`${prefix}/auth/password-reset`, { method: "POST", body: { email }, anonymous: true }),
+  verifyEmail: (token: string) =>
+    request<EmailVerificationResponse>(`${prefix}/auth/email-verification`, { method: "POST", body: { token }, anonymous: true }),
 
-  balances: () => request<AssetBalance[]>(`${apiPrefix}/wallet/balances`, balances),
-  depositAddresses: () => request<DepositAddress[]>(`${apiPrefix}/wallet/addresses`, depositAddresses),
-  deposits: () => request<DepositRecord[]>(`${apiPrefix}/wallet/deposits`, deposits),
-  withdrawals: () => request<WithdrawalRecord[]>(`${apiPrefix}/wallet/withdrawals`, withdrawals),
-  requestWithdrawal: (body: { asset: string; network: string; amount: string; destination: string }) =>
-    request<WithdrawalRecord>(`${apiPrefix}/wallet/withdrawals`, { id: "wd-new", fee: "0.0002", status: "REQUESTED", createdAt: new Date().toISOString(), ...body }, { method: "POST", body: JSON.stringify(body) }),
+  // ---- Wallet ----
+  balances: () => request<Balance[]>(`${prefix}/wallet/balances`),
+  depositAddresses: () => request<DepositAddress[]>(`${prefix}/wallet/addresses`),
+  deposits: () => request<DepositRecord[]>(`${prefix}/wallet/deposits`),
+  withdrawals: () => request<WithdrawalRecord[]>(`${prefix}/wallet/withdrawals`),
+  requestWithdrawal: (body: WithdrawalRequestBody) =>
+    request<WithdrawalView>(`${prefix}/wallet/withdrawals`, { method: "POST", body }),
 
-  markets: () => request<MarketSummary[]>(`${apiPrefix}/markets`, markets),
-  orderBook: (symbol: string) => request<{ bids: OrderBookLevel[]; asks: OrderBookLevel[] }>(`${apiPrefix}/markets/${symbol}/orderbook`, { bids, asks }),
-  publicTrades: (symbol: string) => request<PublicTrade[]>(`${apiPrefix}/markets/${symbol}/trades`, publicTrades),
-  candles: (symbol: string) => request<CandlePoint[]>(`${apiPrefix}/markets/${symbol}/candles?interval=1m`, candles),
-  orders: () => request<OrderRecord[]>(`${apiPrefix}/orders/history`, orders),
-  trades: () => request<TradeRecord[]>(`${apiPrefix}/trades/history`, tradeHistory),
-  position: (symbol: string) => request<PositionSummary>(`${apiPrefix}/trading/position/${symbol}`, { ...positionSummary, market: symbol }),
-  placeOrder: (body: { market: string; side: "BUY" | "SELL"; type: "LIMIT"; price: string; quantity: string }) =>
-    request<OrderRecord>(`${apiPrefix}/orders`, { id: "ord-new", filled: "0", status: "OPEN", createdAt: new Date().toISOString(), ...body }, { method: "POST", body: JSON.stringify(body) }),
-  cancelOrder: (orderId: string) => request<{ cancelled: true }>(`${apiPrefix}/orders/${orderId}`, { cancelled: true }, { method: "DELETE" }),
+  // ---- Market data (public) ----
+  markets: () => request<MarketView[]>(`${prefix}/markets`, { anonymous: true }),
+  ticker: (symbol: string) => request<TickerResponse>(`${prefix}/markets/${encodeURIComponent(symbol)}/ticker`, { anonymous: true }),
+  orderBook: (symbol: string) => request<OrderBookView>(`${prefix}/markets/${encodeURIComponent(symbol)}/orderbook`, { anonymous: true }),
+  publicTrades: (symbol: string) => request<PublicTrade[]>(`${prefix}/markets/${encodeURIComponent(symbol)}/trades`, { anonymous: true }),
+  candles: (symbol: string, interval = "1m") =>
+    request<CandleResponse[]>(`${prefix}/markets/${encodeURIComponent(symbol)}/candles?interval=${encodeURIComponent(interval)}`, { anonymous: true }),
 
-  settings: () => request<SettingsProfile>("/settings/profile", settingsProfile),
+  // ---- Trading ----
+  placeOrder: (body: PlaceOrderBody) => request<PlaceOrderResponse>(`${prefix}/orders`, { method: "POST", body }),
+  cancelOrder: (orderId: string) => request<void>(`${prefix}/orders/${encodeURIComponent(orderId)}`, { method: "DELETE" }),
+  openOrders: () => request<OrderView[]>(`${prefix}/orders/open`),
+  orderHistory: () => request<OrderView[]>(`${prefix}/orders/history`),
+  tradeHistory: () => request<TradeRecord[]>(`${prefix}/trades/history`),
 
-  adminUsers: () => request<AdminUserRecord[]>(`${apiPrefix}/admin/users`, adminUsers),
-  adminAudit: () => request<AdminAuditRecord[]>(`${apiPrefix}/admin/audit`, adminAuditRecords),
-  adminMarketControls: () => request<AdminMarketControl[]>(`${apiPrefix}/admin/markets`, adminMarketControls),
-  reconciliationReports: () => request<ReconciliationReport[]>(`${apiPrefix}/admin/reconciliation`, reconciliationReports),
-  reconciliationDiscrepancies: () => request<ReconciliationDiscrepancy[]>(`${apiPrefix}/admin/reconciliation/discrepancies`, reconciliationDiscrepancies),
-  exportReconciliationCsv: () => request<string>(`${apiPrefix}/admin/reconciliation.csv`, [
-    "reportId,type,status,scope,difference",
-    ...reconciliationReports.map((report) => `${report.id},${report.type},${report.status},${report.scope},${report.difference}`)
-  ].join("\n"))
+  // ---- Admin ----
+  adminUsers: () => request<SessionUser[]>(`${prefix}/admin/users`),
+  adminAudit: () => request<AdminAuditRecord[]>(`${prefix}/admin/audit`),
+  adminMarkets: () => request<AdminMarketControl[]>(`${prefix}/admin/markets`),
+  adminPendingWithdrawals: () => request<WithdrawalRecord[]>(`${prefix}/admin/withdrawals/pending`),
+  reconciliationReports: () => request<ReconciliationReport[]>(`${prefix}/admin/reconciliation`),
+  reconciliationDiscrepancies: () => request<ReconciliationDiscrepancy[]>(`${prefix}/admin/reconciliation/discrepancies`),
+  exportReconciliationCsv: () => request<string>(`${prefix}/admin/reconciliation.csv`, { text: true })
 };

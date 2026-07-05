@@ -24,12 +24,14 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   const pathname = usePathname();
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
-  const setUser = useAuthStore((state) => state.setUser);
-  const canUseAdmin = Boolean(user?.roles.some((role) => role === "ADMIN" || role === "FINANCE_OPS" || role === "COMPLIANCE"));
+  const endSession = useAuthStore((state) => state.endSession);
+  // Backend roles: ADMIN plus specialized operator roles (see auth-user Role enum).
+  const adminRoles = ["ADMIN", "TREASURY_ADMIN", "SECURITY_ADMIN", "COMPLIANCE_OFFICER", "AUDITOR", "RISK_MANAGER"];
+  const canUseAdmin = Boolean(user?.roles.some((role) => adminRoles.includes(role)));
   const logout = useMutation({
     mutationFn: heliumApi.logout,
     onSettled: () => {
-      setUser(null);
+      endSession();
       router.push("/login");
     }
   });

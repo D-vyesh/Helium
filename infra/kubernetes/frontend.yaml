@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: ghcr.io/your-org/helium-frontend:latest
+          image: ghcr.io/d-vyesh/helium-frontend:latest
           ports:
             - containerPort: 3000
           env:

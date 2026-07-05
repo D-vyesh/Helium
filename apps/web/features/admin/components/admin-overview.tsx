@@ -5,41 +5,53 @@ import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/features/auth/store";
 import { heliumApi } from "@/lib/api/client";
-import type { AdminAuditRecord, AdminMarketControl, AdminUserRecord, WithdrawalRecord } from "@/lib/api/types";
+import type { AdminAuditRecord, AdminMarketControl, SessionUser, WithdrawalRecord } from "@/lib/api/types";
 import { queryKeys } from "@/lib/query/keys";
-import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
+import { EmptyState, ErrorState, LoadingState, NotImplemented } from "@/components/ui/state";
 import { DataTable } from "@/components/ui/table";
+import { formatAmount } from "@/lib/utils/format";
 
 export function AdminOverview() {
   const user = useAuthStore((state) => state.user);
   const usersQuery = useQuery({ queryKey: queryKeys.adminUsers, queryFn: heliumApi.adminUsers });
-  const withdrawalsQuery = useQuery({ queryKey: queryKeys.withdrawals, queryFn: heliumApi.withdrawals });
-  const marketsQuery = useQuery({ queryKey: queryKeys.adminMarketControls, queryFn: heliumApi.adminMarketControls });
+  const withdrawalsQuery = useQuery({ queryKey: queryKeys.adminPendingWithdrawals, queryFn: heliumApi.adminPendingWithdrawals });
+  const marketsQuery = useQuery({ queryKey: queryKeys.adminMarketControls, queryFn: heliumApi.adminMarkets });
   const auditQuery = useQuery({ queryKey: queryKeys.adminAudit, queryFn: heliumApi.adminAudit });
 
   if (usersQuery.isLoading || withdrawalsQuery.isLoading || marketsQuery.isLoading || auditQuery.isLoading) {
     return <LoadingState label="Loading admin workspace" />;
   }
 
-  if (usersQuery.isError || withdrawalsQuery.isError || marketsQuery.isError || auditQuery.isError) {
-    return <ErrorState title="Admin data unavailable" detail="The admin workspace could not load operational data." />;
+  const failed = [usersQuery, withdrawalsQuery, marketsQuery, auditQuery].find((query) => query.isError);
+  if (failed) {
+    return (
+      <ErrorState
+        title="Admin data unavailable"
+        error={failed.error}
+        onRetry={() => {
+          void usersQuery.refetch();
+          void withdrawalsQuery.refetch();
+          void marketsQuery.refetch();
+          void auditQuery.refetch();
+        }}
+      />
+    );
   }
 
   const users = usersQuery.data ?? [];
-  const withdrawals = withdrawalsQuery.data ?? [];
+  const pendingWithdrawals = withdrawalsQuery.data ?? [];
   const markets = marketsQuery.data ?? [];
   const audits = auditQuery.data ?? [];
-  const pendingWithdrawals = withdrawals.filter((withdrawal) => withdrawal.status === "REQUESTED" || withdrawal.status === "APPROVED");
 
   return (
     <div className="grid gap-4">
       <div className="grid gap-4 lg:grid-cols-4">
-        <AdminCard title="Users" value={String(users.length)} detail="Active, locked, suspended, and verification-pending accounts." />
-        <AdminCard title="Withdrawal Queue" value={`${pendingWithdrawals.length} pending`} detail="Approval and rejection remain audited backend actions." />
-        <AdminCard title="Markets" value={`${markets.filter((market) => market.enabled).length}/${markets.length} live`} detail="Trading halt/resume controls are role-protected." />
-        <AdminCard title="Audit Events" value={String(audits.length)} detail="Immutable operator activity feed." />
+        <AdminCard title="Users" value={String(users.length)} detail="All registered accounts." />
+        <AdminCard title="Withdrawal Queue" value={`${pendingWithdrawals.length} pending`} detail="Requested and approved withdrawals awaiting processing." />
+        <AdminCard title="Markets" value={`${markets.filter((market) => market.enabled).length}/${markets.length} live`} detail="Registered trading markets." />
+        <AdminCard title="Audit Events" value={String(audits.length)} detail="Latest admin audit records." />
       </div>
-      <section className="rounded border border-slate-800 bg-slate-900 p-4 lg:col-span-3">
+      <section className="rounded border border-slate-800 bg-slate-900 p-4">
         <h2 className="text-lg font-semibold">Current operator</h2>
         <p className="mt-2 text-sm text-slate-400">{user?.email}</p>
         <p className="mt-1 text-sm text-slate-400">{user?.roles.join(", ")}</p>
@@ -62,7 +74,7 @@ function AdminCard({ title, value, detail }: Readonly<{ title: string; value: st
   );
 }
 
-function AdminUserManagement({ users }: Readonly<{ users: AdminUserRecord[] }>) {
+function AdminUserManagement({ users }: Readonly<{ users: SessionUser[] }>) {
   const [query, setQuery] = useState("");
   const filtered = useMemo(
     () => users.filter((user) => `${user.email} ${user.displayName} ${user.status} ${user.roles.join(" ")}`.toLowerCase().includes(query.toLowerCase())),
@@ -76,11 +88,12 @@ function AdminUserManagement({ users }: Readonly<{ users: AdminUserRecord[] }>) 
         <EmptyState title="No users found" detail="Adjust the search terms to inspect another account." />
       ) : (
         <DataTable
-          columns={["Email", "Status", "Roles", "Created"]}
+          columns={["Email", "Status", "Verified", "Roles", "Created"]}
           rows={filtered.map((record) => [
             <span key="email" className="font-medium text-slate-100">{record.email}</span>,
             <StatusBadge key="status" value={record.status} />,
-            <span key="roles">{record.roles.join(", ")}</span>,
+            <span key="verified">{record.emailVerified ? "Yes" : "No"}</span>,
+            <span key="roles">{record.roles.length ? record.roles.join(", ") : "—"}</span>,
             <span key="created">{new Date(record.createdAt).toLocaleString()}</span>
           ])}
         />
@@ -97,15 +110,19 @@ function WithdrawalApprovalQueue({ withdrawals }: Readonly<{ withdrawals: Withdr
         <EmptyState title="No pending withdrawals" detail="New requests will appear here for finance review." />
       ) : (
         <DataTable
-          columns={["Asset", "Amount", "Destination", "Status"]}
+          columns={["Asset", "Amount", "Network", "Destination", "Status"]}
           rows={withdrawals.map((withdrawal) => [
             <span key="asset">{withdrawal.asset}</span>,
-            <span key="amount">{withdrawal.amount}</span>,
+            <span key="amount">{formatAmount(withdrawal.amount)}</span>,
+            <span key="network">{withdrawal.network}</span>,
             <span key="destination" className="font-mono text-xs">{withdrawal.destination}</span>,
-            <StatusBadge key="status" value={withdrawal.status} />
+            <StatusBadge key="status" value={String(withdrawal.status)} />
           ])}
         />
       )}
+      <div className="mt-3">
+        <NotImplemented feature="Approving or rejecting withdrawals from this screen" />
+      </div>
     </section>
   );
 }
@@ -114,15 +131,19 @@ function MarketControls({ markets }: Readonly<{ markets: AdminMarketControl[] }>
   return (
     <section className="rounded border border-slate-800 bg-slate-900 p-4">
       <PanelHeader title="Trading market controls" />
-      <DataTable
-        columns={["Market", "State", "Maker fee", "Taker fee"]}
-        rows={markets.map((market) => [
-          <span key="symbol" className="font-medium text-slate-100">{market.symbol}</span>,
-          <StatusBadge key="state" value={market.halted ? "HALTED" : market.enabled ? "LIVE" : "DISABLED"} />,
-          <span key="maker">{market.makerFeeRate}</span>,
-          <span key="taker">{market.takerFeeRate}</span>
-        ])}
-      />
+      {markets.length === 0 ? (
+        <EmptyState title="No markets registered" />
+      ) : (
+        <DataTable
+          columns={["Market", "State", "Maker fee", "Taker fee"]}
+          rows={markets.map((market) => [
+            <span key="symbol" className="font-medium text-slate-100">{market.symbol}</span>,
+            <StatusBadge key="state" value={market.halted ? "HALTED" : market.enabled ? "LIVE" : "DISABLED"} />,
+            <span key="maker">{formatAmount(market.makerFeeRate)}</span>,
+            <span key="taker">{formatAmount(market.takerFeeRate)}</span>
+          ])}
+        />
+      )}
     </section>
   );
 }
@@ -131,15 +152,20 @@ function AdminAuditViewer({ records }: Readonly<{ records: AdminAuditRecord[] }>
   return (
     <section className="rounded border border-slate-800 bg-slate-900 p-4">
       <PanelHeader title="Audit event viewer" />
-      <DataTable
-        columns={["Action", "Actor", "Target", "Time"]}
-        rows={records.map((record) => [
-          <span key="action">{record.action}</span>,
-          <span key="actor" className="font-mono text-xs">{record.actorId}</span>,
-          <span key="target">{record.target}</span>,
-          <span key="time">{new Date(record.occurredAt).toLocaleString()}</span>
-        ])}
-      />
+      {records.length === 0 ? (
+        <EmptyState title="No audit events" />
+      ) : (
+        <DataTable
+          columns={["Action", "Actor", "Target", "Details", "Time"]}
+          rows={records.map((record) => [
+            <span key="action">{record.action}</span>,
+            <span key="actor" className="font-mono text-xs">{record.actorId}</span>,
+            <span key="target">{record.target}</span>,
+            <span key="details">{record.details}</span>,
+            <span key="time">{new Date(record.occurredAt).toLocaleString()}</span>
+          ])}
+        />
+      )}
     </section>
   );
 }
