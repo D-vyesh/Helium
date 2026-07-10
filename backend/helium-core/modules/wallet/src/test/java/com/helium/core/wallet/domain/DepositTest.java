@@ -1,7 +1,6 @@
 package com.helium.core.wallet.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -31,7 +30,7 @@ class DepositTest {
     }
 
     @Test
-    void rejectsConfirmationDecrease() {
+    void returnsToPendingWhenConfirmationsDecreaseBeforePosting() {
         Deposit deposit = Deposit.detect(
             UUID.randomUUID(),
             UUID.randomUUID(),
@@ -44,10 +43,9 @@ class DepositTest {
             NOW
         );
         deposit.updateConfirmations(2, NOW.plusSeconds(30));
+        deposit.updateConfirmations(1, NOW.plusSeconds(60));
 
-        assertThatThrownBy(() -> deposit.updateConfirmations(1, NOW.plusSeconds(60)))
-            .isInstanceOf(WalletValidationException.class)
-            .hasMessageContaining("cannot decrease");
+        assertThat(deposit.status()).isEqualTo(DepositStatus.PENDING_CONFIRMATIONS);
     }
 
     @Test
@@ -65,5 +63,28 @@ class DepositTest {
         );
 
         assertThat(deposit.status()).isEqualTo(DepositStatus.DETECTED);
+    }
+
+    @Test
+    void preservesTheLedgerPostingReferenceWhenMarkedReorged() {
+        Deposit deposit = Deposit.detect(
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            "BTC",
+            "BTC",
+            "tx-1",
+            0,
+            BigDecimal.ONE,
+            1,
+            NOW
+        );
+        UUID ledgerTransactionId = UUID.randomUUID();
+        deposit.updateConfirmations(1, NOW.plusSeconds(30));
+        deposit.markPosted(ledgerTransactionId, NOW.plusSeconds(31));
+
+        deposit.markReorged(NOW.plusSeconds(60), "REORG_DETECTED");
+
+        assertThat(deposit.status()).isEqualTo(DepositStatus.REORGED);
+        assertThat(deposit.ledgerTransactionId()).isEqualTo(ledgerTransactionId);
     }
 }

@@ -55,9 +55,11 @@ public class WithdrawalApprovalWorkflow {
             log.warn("Withdrawal {} exceeds cold wallet threshold! Flagging for manual multi-sig approval.", withdrawalId);
             requireManualApproval(withdrawalId);
         } else {
-            log.info("Withdrawal {} is within hot wallet limits. Proceeding with automated signing.", withdrawalId);
-            byte[] signedTx = hotWalletSigner.signTransaction("dummy-unsigned-tx".getBytes());
-            broadcastTransaction(networkId, signedTx);
+            log.warn(
+                "Withdrawal {} passed preliminary checks but automated builders/signers are not configured. Holding for manual approval.",
+                withdrawalId
+            );
+            requireManualApproval(withdrawalId);
         }
     }
 

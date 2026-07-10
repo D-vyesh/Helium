@@ -109,7 +109,7 @@ public class WalletReconciliationService implements WalletReconciliationPort {
         BigDecimal deposits = depositRepository.sumAmountByAssetCodeAndNetworkCodeAndStatus(
             assetCode,
             networkCode,
-            DepositStatus.POSTED
+            DepositStatus.POSTED_TO_LEDGER
         );
         BigDecimal withdrawals = withdrawalRepository.sumAmountByAssetCodeAndNetworkCodeAndStatus(
             assetCode,

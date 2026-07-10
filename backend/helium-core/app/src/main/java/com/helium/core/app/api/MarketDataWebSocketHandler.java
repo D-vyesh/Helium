@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -47,10 +48,30 @@ public class MarketDataWebSocketHandler extends TextWebSocketHandler {
         sessions.forEach(session -> send(session, body));
     }
 
+    @Scheduled(fixedRate = 15000)
+    public void heartbeat() {
+        sessionsByTopic.forEach((topic, sessions) -> {
+            if (sessions.isEmpty()) {
+                return;
+            }
+            String body;
+            try {
+                body = objectMapper.writeValueAsString(new SocketEvent("heartbeat", topic, Instant.now(), null));
+            } catch (IOException exception) {
+                throw new IllegalStateException("websocket heartbeat serialization failed", exception);
+            }
+            sessions.forEach(session -> send(session, body));
+        });
+    }
+
     private void send(WebSocketSession session, String body) {
         try {
             if (session.isOpen()) {
-                session.sendMessage(new TextMessage(body));
+                synchronized (session) {
+                    if (session.isOpen()) {
+                        session.sendMessage(new TextMessage(body));
+                    }
+                }
             }
         } catch (IOException ignored) {
             try {

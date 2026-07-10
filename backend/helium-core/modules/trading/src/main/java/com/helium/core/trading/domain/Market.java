@@ -107,6 +107,14 @@ public class Market {
         return minOrderQuantity;
     }
 
+    public int priceScale() {
+        return priceScale;
+    }
+
+    public int quantityScale() {
+        return quantityScale;
+    }
+
     public BigDecimal minNotional() {
         return minNotional;
     }

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { wsBaseUrl } from "@/lib/api/http";
 
-export type MarketChannel = "ticker" | "trades" | "orderbook";
+export type MarketChannel = "ticker" | "trades" | "orderbook" | "candles";
 export type StreamStatus = "connecting" | "connected" | "disconnected" | "unavailable";
 
 export type MarketSocketEvent = {
@@ -14,6 +14,7 @@ export type MarketSocketEvent = {
 };
 
 const MAX_BACKOFF_MS = 15000;
+const STALE_AFTER_MS = 45000;
 
 /**
  * Connects to the backend market-data WebSocket
@@ -36,6 +37,8 @@ export function useMarketStream(
     let disposed = false;
     let attempts = 0;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let staleTimer: ReturnType<typeof setInterval> | null = null;
+    let lastFrameAt = Date.now();
 
     let base: string;
     try {
@@ -57,11 +60,13 @@ export function useMarketStream(
 
       socket.onopen = () => {
         attempts = 0;
+        lastFrameAt = Date.now();
         setStatus("connected");
       };
       socket.onmessage = (message) => {
         try {
           const event = JSON.parse(message.data as string) as MarketSocketEvent;
+          lastFrameAt = Date.now();
           onEventRef.current?.(event);
         } catch {
           // Ignore malformed frames; REST polling remains the source of truth.
@@ -86,10 +91,16 @@ export function useMarketStream(
     };
 
     connect();
+    staleTimer = setInterval(() => {
+      if (socket?.readyState === WebSocket.OPEN && Date.now() - lastFrameAt > STALE_AFTER_MS) {
+        socket.close();
+      }
+    }, 5000);
 
     return () => {
       disposed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (staleTimer) clearInterval(staleTimer);
       socket?.close();
     };
   }, [symbol, channel]);

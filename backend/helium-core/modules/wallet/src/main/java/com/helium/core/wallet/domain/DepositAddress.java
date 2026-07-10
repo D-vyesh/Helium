@@ -80,5 +80,8 @@ public class DepositAddress {
     public String memo() {
         return memo;
     }
-}
 
+    public DepositAddressStatus status() {
+        return status;
+    }
+}

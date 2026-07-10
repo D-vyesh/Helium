@@ -72,6 +72,13 @@ services:
       backend:
         condition: service_healthy
 
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    ports:
+      - "${MAILHOG_SMTP_PORT:-1025}:1025"
+      - "${MAILHOG_UI_PORT:-8025}:8025"
+    profiles: ["dev", "mail"]
+
   prometheus:
     image: prom/prometheus:v2.55.1
     profiles: ["monitoring"]

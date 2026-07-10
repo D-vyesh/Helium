@@ -26,6 +26,7 @@ public class PasswordManagementService implements PasswordManagementPort {
     private final TokenCodec tokenCodec;
     private final PasswordTransactionService transactionService;
     private final SecurityAuditService auditService;
+    private final EmailService emailService;
     private final Clock clock;
 
     public PasswordManagementService(
@@ -36,6 +37,7 @@ public class PasswordManagementService implements PasswordManagementPort {
         TokenCodec tokenCodec,
         PasswordTransactionService transactionService,
         SecurityAuditService auditService,
+        EmailService emailService,
         Clock clock
     ) {
         this.userAccountRepository = userAccountRepository;
@@ -45,12 +47,19 @@ public class PasswordManagementService implements PasswordManagementPort {
         this.tokenCodec = tokenCodec;
         this.transactionService = transactionService;
         this.auditService = auditService;
+        this.emailService = emailService;
         this.clock = clock;
     }
 
     @Override
     @Transactional
     public PasswordResetRequestResult requestReset(String email, SecurityContextData securityContext) {
+        return requestReset(email, "http://localhost:3000", securityContext);
+    }
+
+    @Override
+    @Transactional
+    public PasswordResetRequestResult requestReset(String email, String baseUrl, SecurityContextData securityContext) {
         TokenValue token = tokenCodec.generate();
         UserAccount account = userAccountRepository.findByEmail(UserAccount.normalizeEmail(email)).orElse(null);
         if (account != null && account.status() != UserAccountStatus.CLOSED) {
@@ -67,7 +76,11 @@ public class PasswordManagementService implements PasswordManagementPort {
                 securityContext,
                 "password reset token issued"
             );
+            // Send reset email — token is NEVER returned to the client
+            String resetUrl = baseUrl + "/reset-password?token=" + token.rawToken();
+            emailService.sendPasswordResetEmail(account.email(), account.displayName(), resetUrl);
         } else {
+            // Always return accepted to prevent email enumeration
             auditService.record(
                 SecurityAuditEventType.PASSWORD_RESET_REQUESTED,
                 null,
@@ -76,7 +89,7 @@ public class PasswordManagementService implements PasswordManagementPort {
                 "password reset request accepted"
             );
         }
-        return PasswordResetRequestResult.accepted(token.rawToken());
+        return PasswordResetRequestResult.accepted();
     }
 
     @Override

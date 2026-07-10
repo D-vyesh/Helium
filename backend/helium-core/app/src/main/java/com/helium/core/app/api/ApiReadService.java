@@ -22,7 +22,16 @@ public class ApiReadService {
     @Transactional(readOnly = true)
     public UserDto user(UUID userId, Set<String> roles) {
         return jdbcTemplate.queryForObject(
-            "select id, email, display_name, status, email_verified_at, created_at from auth_user_accounts where id = ?",
+            """
+            select account.id, account.email, account.display_name, account.status,
+                   account.email_verified_at, account.created_at,
+                   exists (
+                       select 1 from auth_mfa_methods method
+                       where method.user_id = account.id and method.type = 'TOTP' and method.status = 'ENABLED'
+                   ) as mfa_enabled
+            from auth_user_accounts account
+            where account.id = ?
+            """,
             (rs, rowNum) -> user(rs, roles),
             userId
         );
@@ -33,6 +42,10 @@ public class ApiReadService {
         return jdbcTemplate.query(
             """
             select account.id, account.email, account.display_name, account.status, account.email_verified_at, account.created_at,
+                   exists (
+                       select 1 from auth_mfa_methods method
+                       where method.user_id = account.id and method.type = 'TOTP' and method.status = 'ENABLED'
+                   ) as mfa_enabled,
                    coalesce(string_agg(role.role, ',' order by role.role) filter (where role.revoked_at is null), '') as roles
             from auth_user_accounts account
             left join auth_role_grants role on role.user_id = account.id
@@ -45,6 +58,7 @@ public class ApiReadService {
                 rs.getString("display_name"),
                 rs.getString("status"),
                 rs.getTimestamp("email_verified_at") != null,
+                rs.getBoolean("mfa_enabled"),
                 splitRoles(rs.getString("roles")),
                 rs.getTimestamp("created_at").toInstant()
             )
@@ -147,6 +161,34 @@ public class ApiReadService {
                 rs.getTimestamp("created_at").toInstant()
             ),
             userId
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public OrderExecutionSummary orderExecutionSummary(UUID orderId) {
+        return jdbcTemplate.query(
+            """
+            select coalesce(sum(quantity), 0) as filled_quantity,
+                   case
+                     when coalesce(sum(quantity), 0) = 0 then null
+                     else sum(quantity * price) / sum(quantity)
+                   end as average_price,
+                   max(created_at) as last_execution_at
+            from trading_settlement_instructions
+            where buyer_order_id = ? or seller_order_id = ?
+            """,
+            rs -> {
+                if (!rs.next()) {
+                    return new OrderExecutionSummary(BigDecimal.ZERO, null, null);
+                }
+                return new OrderExecutionSummary(
+                    rs.getBigDecimal("filled_quantity"),
+                    rs.getBigDecimal("average_price"),
+                    rs.getTimestamp("last_execution_at") == null ? null : rs.getTimestamp("last_execution_at").toInstant()
+                );
+            },
+            orderId,
+            orderId
         );
     }
 
@@ -254,6 +296,7 @@ public class ApiReadService {
             rs.getString("display_name"),
             rs.getString("status"),
             rs.getTimestamp("email_verified_at") != null,
+            rs.getBoolean("mfa_enabled"),
             roles,
             rs.getTimestamp("created_at").toInstant()
         );
@@ -266,12 +309,13 @@ public class ApiReadService {
         return Set.of(roles.split(","));
     }
 
-    public record UserDto(UUID id, String email, String displayName, String status, boolean emailVerified, Set<String> roles, Instant createdAt) {}
+    public record UserDto(UUID id, String email, String displayName, String status, boolean emailVerified, boolean mfaEnabled, Set<String> roles, Instant createdAt) {}
     public record BalanceDto(String asset, BigDecimal available, BigDecimal locked) {}
     public record DepositDto(UUID id, String asset, String network, String txHash, int outputIndex, BigDecimal amount, int confirmations, String status, Instant createdAt) {}
     public record WithdrawalDto(UUID id, String clientRequestId, UUID userId, String asset, String network, String destination, String memo, BigDecimal amount, BigDecimal fee, String status, Instant createdAt, String txHash) {}
     public record AddressDto(UUID id, String asset, String network, String address, String memo, String status, Instant createdAt) {}
     public record TradeDto(String executionId, String market, String side, BigDecimal price, BigDecimal quantity, BigDecimal fee, Instant time) {}
+    public record OrderExecutionSummary(BigDecimal filledQuantity, BigDecimal averagePrice, Instant lastExecutionAt) {}
     public record AuditDto(UUID id, String action, String actorId, String target, String details, Instant occurredAt) {}
     public record ReconciliationDto(UUID id, String type, String status, String scope, BigDecimal difference, Instant createdAt) {}
     public record ReconciliationDiscrepancyDto(UUID id, UUID reportId, String severity, String scope, String details, BigDecimal difference, Instant detectedAt) {}

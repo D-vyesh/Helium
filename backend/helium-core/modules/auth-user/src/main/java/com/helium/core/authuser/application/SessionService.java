@@ -11,6 +11,7 @@ import com.helium.core.authuser.infrastructure.UserAccountRepository;
 import com.helium.core.authuser.infrastructure.UserSessionRepository;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -149,6 +150,28 @@ public class SessionService implements SessionPort {
         revokeActiveSessions(userId, reason, securityContext);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<SessionDetails> sessions(UUID userId, String currentSessionToken) {
+        String currentTokenHash = currentSessionToken == null || currentSessionToken.isBlank()
+            ? null
+            : tokenCodec.hash(currentSessionToken);
+        Instant now = clock.instant();
+        return sessionRepository.findAllByUserIdOrderByCreatedAtDesc(userId).stream()
+            .map(session -> toDetails(session, now, currentTokenHash))
+            .toList();
+    }
+
+    @Override
+    @Transactional
+    public void revoke(UUID userId, UUID sessionId, SecurityContextData securityContext) {
+        UserSession session = sessionRepository.findByIdAndUserId(sessionId, userId)
+            .orElseThrow(() -> new AuthValidationException("session was not found"));
+        session.revoke("user revoked session", clock.instant());
+        sessionCachePort.evict(session.tokenHash());
+        auditService.record(SecurityAuditEventType.SESSION_REVOKED, userId, session.id(), securityContext, "user revoked session");
+    }
+
     void revokeActiveSessions(UUID userId, String reason, SecurityContextData securityContext) {
         userAccountRepository.findByIdForUpdate(userId)
             .orElseThrow(() -> new AuthValidationException("user account was not found"));
@@ -165,5 +188,42 @@ public class SessionService implements SessionPort {
         return roleGrantRepository.findAllByUserIdAndRevokedAtIsNull(userId).stream()
             .map(grant -> grant.role())
             .collect(Collectors.toUnmodifiableSet());
+    }
+
+    private SessionDetails toDetails(UserSession session, Instant now, String currentTokenHash) {
+        boolean active = session.isActive(now);
+        String browser = browserName(session.userAgent());
+        String platform = platformName(session.userAgent());
+        return new SessionDetails(
+            session.id(),
+            browser + " on " + platform,
+            browser,
+            session.ipAddress(),
+            session.userAgent(),
+            session.createdAt(),
+            session.lastSeenAt(),
+            session.expiresAt(),
+            active ? SessionStatus.ACTIVE : session.status(),
+            currentTokenHash != null && session.tokenHash().equals(currentTokenHash)
+        );
+    }
+
+    private static String browserName(String userAgent) {
+        String value = userAgent == null ? "" : userAgent;
+        if (value.contains("Edg/")) return "Microsoft Edge";
+        if (value.contains("Chrome/")) return "Chrome";
+        if (value.contains("Firefox/")) return "Firefox";
+        if (value.contains("Safari/")) return "Safari";
+        return "Unknown browser";
+    }
+
+    private static String platformName(String userAgent) {
+        String value = userAgent == null ? "" : userAgent;
+        if (value.contains("Windows")) return "Windows";
+        if (value.contains("Mac OS X")) return "macOS";
+        if (value.contains("Android")) return "Android";
+        if (value.contains("iPhone") || value.contains("iPad")) return "iOS";
+        if (value.contains("Linux")) return "Linux";
+        return "Unknown device";
     }
 }

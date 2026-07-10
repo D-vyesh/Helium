@@ -84,6 +84,7 @@ class AuthUserPostgresIntegrationTest {
     @BeforeEach
     void clearAuthUserData() {
         SecurityContextHolder.clearContext();
+        CapturingEmailService.clear();
         jdbcTemplate.execute("""
             truncate table
                 auth_security_audit_events,
@@ -120,10 +121,11 @@ class AuthUserPostgresIntegrationTest {
         );
 
         assertThat(credential.get("password_hash").toString()).startsWith("$2").doesNotContain(INITIAL_PASSWORD);
-        assertThat(storedVerificationHash).hasSize(64).isNotEqualTo(result.emailVerificationToken());
+        String verificationToken = CapturingEmailService.verificationToken("User@Example.com");
+        assertThat(storedVerificationHash).hasSize(64).isNotEqualTo(verificationToken);
         assertThat(statusOf(result.userId())).isEqualTo("EMAIL_UNVERIFIED");
 
-        emailVerificationPort.verify(result.emailVerificationToken(), CONTEXT);
+        emailVerificationPort.verify(verificationToken, CONTEXT);
 
         assertThat(statusOf(result.userId())).isEqualTo("ACTIVE");
         assertThat(roleManagementPort.rolesFor(result.userId())).containsExactly(Role.USER);
@@ -211,8 +213,10 @@ class AuthUserPostgresIntegrationTest {
     void passwordResetChangesCredentialAndRevokesExistingSessions() {
         RegistrationResult user = registerAndVerify("reset@example.com");
         LoginResult existingLogin = login("reset@example.com", INITIAL_PASSWORD);
-        String resetToken = passwordManagementPort.requestReset("reset@example.com", CONTEXT).rawToken();
-        String siblingResetToken = passwordManagementPort.requestReset("reset@example.com", CONTEXT).rawToken();
+        passwordManagementPort.requestReset("reset@example.com", CONTEXT);
+        String resetToken = CapturingEmailService.passwordResetToken("reset@example.com");
+        passwordManagementPort.requestReset("reset@example.com", CONTEXT);
+        String siblingResetToken = CapturingEmailService.passwordResetToken("reset@example.com");
 
         assertThat(jdbcTemplate.queryForObject(
             "select token_hash from auth_password_reset_tokens where user_id = ? order by created_at limit 1",
@@ -330,7 +334,7 @@ class AuthUserPostgresIntegrationTest {
 
     private RegistrationResult registerAndVerify(String email) {
         RegistrationResult result = register(email);
-        emailVerificationPort.verify(result.emailVerificationToken(), CONTEXT);
+        emailVerificationPort.verify(CapturingEmailService.verificationToken(email), CONTEXT);
         return result;
     }
 

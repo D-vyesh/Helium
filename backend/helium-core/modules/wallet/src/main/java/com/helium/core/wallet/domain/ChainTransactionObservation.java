@@ -162,8 +162,8 @@ public class ChainTransactionObservation {
     }
 
     public void updateConfirmations(int nextConfirmations, String actorId, Instant now) {
-        if (nextConfirmations < confirmations) {
-            throw new WalletValidationException("chain confirmations cannot decrease");
+        if (nextConfirmations < 0) {
+            throw new WalletValidationException("chain confirmations cannot be negative");
         }
         confirmations = nextConfirmations;
         observedBy = BlockchainNetwork.requireText(actorId, "actorId", 120);

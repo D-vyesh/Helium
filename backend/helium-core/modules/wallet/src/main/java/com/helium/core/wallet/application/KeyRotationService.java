@@ -1,37 +1,51 @@
 package com.helium.core.wallet.application;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Scheduled;
+import com.helium.core.wallet.domain.Asset;
+import com.helium.core.wallet.domain.CustodyKey;
+import com.helium.core.wallet.domain.CustodyKeyStatus;
+import com.helium.core.wallet.domain.SigningAlgorithm;
+import com.helium.core.wallet.domain.WalletAuditEventType;
+import com.helium.core.wallet.infrastructure.CustodyKeyRepository;
+import java.time.Clock;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Service responsible for orchestrating automated key rotation procedures 
- * within the KMS and HSM custody providers.
- */
 @Service
 public class KeyRotationService {
-    private static final Logger log = LoggerFactory.getLogger(KeyRotationService.class);
+    private final CustodyKeyRepository custodyKeyRepository;
+    private final WalletAuditService auditService;
+    private final Clock clock;
 
-    private final CustodyProvider hotWalletSigner;
-
-    public KeyRotationService(HotWalletSigner hotWalletSigner) {
-        this.hotWalletSigner = hotWalletSigner;
+    public KeyRotationService(CustodyKeyRepository custodyKeyRepository, WalletAuditService auditService, Clock clock) {
+        this.custodyKeyRepository = custodyKeyRepository;
+        this.auditService = auditService;
+        this.clock = clock;
     }
 
-    /**
-     * Executes periodically to rotate intermediate keys used in hot wallets.
-     * Scheduled for 30 days (2592000000 ms) by default, or configurable.
-     */
-    @Scheduled(fixedDelayString = "${helium.wallet.key-rotation-ms:2592000000}")
-    public void rotateHotWalletKeys() {
-        log.info("Initiating automated key rotation for Hot Wallet keys in KMS");
-        
-        // 1. Generate new keys in KMS
-        // 2. Transfer small test amount to verify signatures
-        // 3. Mark old keys as 'RETIRED' (sign-only -> verify-only)
-        // 4. Update routing to use new active keys
-        
-        log.info("Hot Wallet key rotation completed successfully. Old keys marked for deprecation.");
+    @Transactional
+    public CustodyKey rotateActiveKey(
+        String assetCode,
+        String newKeyAlias,
+        String newKeyVersion,
+        String provider,
+        SigningAlgorithm algorithm,
+        String publicKeyHex,
+        String actorId
+    ) {
+        String asset = Asset.normalizeCode(assetCode);
+        custodyKeyRepository.findByAssetCodeAndStatus(asset, CustodyKeyStatus.ACTIVE)
+            .ifPresent(oldKey -> oldKey.verifyOnly(clock.instant()));
+        CustodyKey newKey = custodyKeyRepository.save(CustodyKey.register(
+            asset,
+            newKeyAlias,
+            newKeyVersion,
+            provider,
+            algorithm,
+            publicKeyHex,
+            CustodyKeyStatus.ACTIVE,
+            clock.instant()
+        ));
+        auditService.record(WalletAuditEventType.CUSTODY_KEY_ROTATED, null, actorId, asset + ":" + newKeyAlias);
+        return newKey;
     }
 }

@@ -12,16 +12,12 @@ public class AzureKeyVaultProvider implements KmsProvider {
 
     @Override
     public byte[] encrypt(byte[] plaintext) {
-        log.debug("Encrypting payload via Azure Key Vault");
-        // Azure Key Vault integration stub
-        return plaintext;
+        throw new UnsupportedOperationException("Azure Key Vault encryption is not configured");
     }
 
     @Override
     public byte[] decrypt(byte[] ciphertext) {
-        log.debug("Decrypting payload via Azure Key Vault");
-        // Azure Key Vault integration stub
-        return ciphertext;
+        throw new UnsupportedOperationException("Azure Key Vault decryption is not configured");
     }
 
     @Override

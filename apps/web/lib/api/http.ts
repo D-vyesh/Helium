@@ -19,8 +19,9 @@ export function wsBaseUrl(): string {
 }
 
 type RequestOptions = {
-  method?: "GET" | "POST" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
+  headers?: Record<string, string>;
   /** Skip Authorization header (public endpoints). */
   anonymous?: boolean;
   /** Response is plain text (e.g. CSV export). */
@@ -75,7 +76,7 @@ async function tryRefreshSession(): Promise<boolean> {
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const url = `${apiBaseUrl()}${path}`;
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...(options.headers ?? {}) };
   if (options.body !== undefined) {
     headers["content-type"] = "application/json";
   }

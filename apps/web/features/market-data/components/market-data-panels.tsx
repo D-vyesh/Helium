@@ -1,41 +1,66 @@
 "use client";
 
 import {
-  CandlestickChart,
   MarketTicker,
   OrderBookPanel,
   PriceChangeBadge,
   RecentTradesPanel,
   type BookLevel
 } from "@/components/exchange/exchange-components";
+import { CandlestickChart } from "@/components/charts/candlestick-chart";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/table";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
 import { Search } from "@/components/ui/search";
 import { heliumApi } from "@/lib/api/client";
-import type { BookOrder, TickerResponse } from "@/lib/api/types";
+import type { BookOrder, CandleResponse, OrderBookView, PublicTrade, TickerResponse } from "@/lib/api/types";
 import { queryKeys } from "@/lib/query/keys";
 import { formatAmount } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 import { useMarketStream, type StreamStatus } from "@/lib/ws/market-stream";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 
-/**
- * Throttled query invalidation driven by WebSocket events so REST queries
- * refresh when the backend broadcasts market activity.
- */
-function useStreamRefresh(queryKey: readonly unknown[], minIntervalMs = 1000) {
+function useStreamQueryUpdater<T>(
+  queryKey: readonly unknown[],
+  expectedType: string,
+  isPayload: (payload: unknown) => payload is T,
+  minFallbackIntervalMs = 1000
+) {
   const queryClient = useQueryClient();
   const lastRefresh = useRef(0);
-  return useCallback(() => {
+  return useCallback((event: { type: string; payload: unknown }) => {
+    if (event.type === expectedType && isPayload(event.payload)) {
+      queryClient.setQueryData(queryKey, event.payload);
+      return;
+    }
+    if (event.type === "heartbeat" || event.type === "connected") {
+      return;
+    }
     const now = Date.now();
-    if (now - lastRefresh.current >= minIntervalMs) {
+    if (now - lastRefresh.current >= minFallbackIntervalMs) {
       lastRefresh.current = now;
       void queryClient.invalidateQueries({ queryKey });
     }
-  }, [queryClient, queryKey, minIntervalMs]);
+  }, [expectedType, isPayload, minFallbackIntervalMs, queryClient, queryKey]);
+}
+
+function isTicker(payload: unknown): payload is TickerResponse {
+  return typeof payload === "object" && payload !== null && "lastPrice" in payload && "market" in payload;
+}
+
+function isOrderBook(payload: unknown): payload is OrderBookView {
+  return typeof payload === "object" && payload !== null && "bids" in payload && "asks" in payload;
+}
+
+function isTrades(payload: unknown): payload is PublicTrade[] {
+  return Array.isArray(payload) && payload.every((item) => typeof item === "object" && item !== null && "price" in item && "quantity" in item);
+}
+
+function isCandles(payload: unknown): payload is CandleResponse[] {
+  return Array.isArray(payload) && payload.every((item) => typeof item === "object" && item !== null && "openTime" in item && "close" in item);
 }
 
 export function StreamBadge({ status }: Readonly<{ status: StreamStatus }>) {
@@ -47,6 +72,7 @@ export function StreamBadge({ status }: Readonly<{ status: StreamStatus }>) {
 
 export function MarketList() {
   const marketsQuery = useQuery({ queryKey: queryKeys.markets, queryFn: heliumApi.markets });
+  const statusQuery = useQuery({ queryKey: queryKeys.marketStreamStatus, queryFn: heliumApi.marketStreamStatus, refetchInterval: 10000 });
   const [search, setSearch] = useState("");
   const symbols = useMemo(() => (marketsQuery.data ?? []).map((market) => market.symbol), [marketsQuery.data]);
   const tickerQueries = useQueries({
@@ -76,7 +102,10 @@ export function MarketList() {
       <MarketTicker tickers={tickers} />
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <Search className="max-w-sm" onChange={(event) => setSearch(event.target.value)} placeholder="Search markets" value={search} />
-        <Badge tone="info">{markets.length} instruments</Badge>
+        <div className="flex items-center gap-2">
+          {statusQuery.data ? <Badge tone={statusQuery.data.connected ? "success" : "warning"}>{statusQuery.data.source} {statusQuery.data.connected ? "streaming" : "syncing"}</Badge> : null}
+          <Badge tone="info">{markets.length} instruments</Badge>
+        </div>
       </div>
       <DataTable
         columns={["Market", "Last Price", "24h Change", "24h Volume", "Status"]}
@@ -87,7 +116,7 @@ export function MarketList() {
             <span className="font-mono" key="price">{ticker ? formatAmount(ticker.lastPrice) : "—"}</span>,
             ticker ? <PriceChangeBadge key="change" lastPrice={ticker.lastPrice} openPrice={ticker.openPrice24h} /> : <span key="change">—</span>,
             <span className="font-mono text-slate-300" key="volume">{ticker ? `${formatAmount(ticker.volume24h)} ${market.baseAsset}` : "—"}</span>,
-            <Badge key="status" tone={market.enabled ? "success" : "warning"}>{market.enabled ? "Online" : "Paused"}</Badge>
+            <Badge key="status" tone={market.enabled ? "success" : "warning"}>{market.enabled ? market.source : "Paused"}</Badge>
           ];
         })}
       />
@@ -127,8 +156,8 @@ function toLevels(orders: BookOrder[]): BookLevel[] {
 
 export function OrderBook({ symbol }: Readonly<{ symbol: string }>) {
   const query = useQuery({ queryKey: queryKeys.orderBook(symbol), queryFn: () => heliumApi.orderBook(symbol), refetchInterval: 5000 });
-  const refresh = useStreamRefresh(queryKeys.orderBook(symbol));
-  const status = useMarketStream(symbol, "orderbook", refresh);
+  const update = useStreamQueryUpdater(queryKeys.orderBook(symbol), "orderbook", isOrderBook);
+  const status = useMarketStream(symbol, "orderbook", update);
 
   if (query.isLoading) return <LoadingState label="Loading order book" />;
   if (query.isError) return <ErrorState title="Could not load order book" error={query.error} onRetry={() => void query.refetch()} />;
@@ -146,8 +175,8 @@ export function OrderBook({ symbol }: Readonly<{ symbol: string }>) {
 
 export function RecentTrades({ symbol }: Readonly<{ symbol: string }>) {
   const query = useQuery({ queryKey: queryKeys.publicTrades(symbol), queryFn: () => heliumApi.publicTrades(symbol), refetchInterval: 5000 });
-  const refresh = useStreamRefresh(queryKeys.publicTrades(symbol));
-  const status = useMarketStream(symbol, "trades", refresh);
+  const update = useStreamQueryUpdater(queryKeys.publicTrades(symbol), "trades", isTrades);
+  const status = useMarketStream(symbol, "trades", update);
 
   if (query.isLoading) return <LoadingState label="Loading trades" />;
   if (query.isError) return <ErrorState title="Could not load trades" error={query.error} onRetry={() => void query.refetch()} />;
@@ -162,18 +191,35 @@ export function RecentTrades({ symbol }: Readonly<{ symbol: string }>) {
 
 export function CandleChart({ symbol }: Readonly<{ symbol: string }>) {
   const query = useQuery({ queryKey: queryKeys.candles(symbol), queryFn: () => heliumApi.candles(symbol), refetchInterval: 15000 });
-  if (query.isLoading) return <LoadingState label="Loading candles" />;
-  if (query.isError) return <ErrorState title="Could not load candles" error={query.error} onRetry={() => void query.refetch()} />;
-  if (!query.data?.length) return <EmptyState title="No candle data" detail="Candles appear once trades execute in this market." />;
-  // Backend returns newest-first; the chart renders oldest to newest.
-  const ascending = [...query.data].reverse();
-  return <CandlestickChart candles={ascending} />;
+  const update = useStreamQueryUpdater(queryKeys.candles(symbol), "candles", isCandles, 5000);
+  const status = useMarketStream(symbol, "candles", update);
+
+  let body: ReactNode;
+  if (query.isLoading) {
+    body = <LoadingState label="Loading candles" />;
+  } else if (query.isError) {
+    body = <ErrorState title="Could not load candles" error={query.error} onRetry={() => void query.refetch()} />;
+  } else if (!query.data?.length) {
+    body = <EmptyState title="No candle data" detail="Candles appear once trades execute in this market." />;
+  } else {
+    body = <CandlestickChart candles={query.data} />;
+  }
+
+  return (
+    <Card className="terminal-grid">
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle>Candles</CardTitle>
+        <StreamBadge status={status} />
+      </CardHeader>
+      <CardContent>{body}</CardContent>
+    </Card>
+  );
 }
 
 export function TickerHeader({ symbol }: Readonly<{ symbol: string }>) {
   const query = useQuery({ queryKey: queryKeys.ticker(symbol), queryFn: () => heliumApi.ticker(symbol), refetchInterval: 5000 });
-  const refresh = useStreamRefresh(queryKeys.ticker(symbol));
-  const status = useMarketStream(symbol, "ticker", refresh);
+  const update = useStreamQueryUpdater(queryKeys.ticker(symbol), "ticker", isTicker);
+  const status = useMarketStream(symbol, "ticker", update);
 
   if (query.isLoading) return <LoadingState label="Loading ticker" />;
   if (query.isError) return <ErrorState title="Could not load ticker" error={query.error} onRetry={() => void query.refetch()} />;
@@ -187,6 +233,8 @@ export function TickerHeader({ symbol }: Readonly<{ symbol: string }>) {
       <span className="text-muted-foreground">24h High <span className="font-mono text-slate-300">{formatAmount(ticker.highPrice24h)}</span></span>
       <span className="text-muted-foreground">24h Low <span className="font-mono text-slate-300">{formatAmount(ticker.lowPrice24h)}</span></span>
       <span className="text-muted-foreground">24h Volume <span className="font-mono text-slate-300">{formatAmount(ticker.volume24h)}</span></span>
+      <span className="text-muted-foreground">Bid <span className="font-mono text-emerald-300">{formatAmount(ticker.bestBid)}</span></span>
+      <span className="text-muted-foreground">Ask <span className="font-mono text-red-300">{formatAmount(ticker.bestAsk)}</span></span>
       <span className="ml-auto"><StreamBadge status={status} /></span>
     </div>
   );

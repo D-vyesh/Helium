@@ -1,6 +1,7 @@
 package com.helium.core.app.api;
 
 import com.helium.core.admin.domain.AdminValidationException;
+import com.helium.core.authuser.domain.AuthValidationException;
 import jakarta.validation.ConstraintViolationException;
 import java.net.URI;
 import org.springframework.http.HttpStatus;
@@ -29,6 +30,11 @@ public class ApiExceptionHandler {
             return problem(HttpStatus.UNAUTHORIZED, "Authentication required", exception.getMessage());
         }
         return problem(HttpStatus.FORBIDDEN, "Forbidden", exception.getMessage());
+    }
+
+    @ExceptionHandler(AuthValidationException.class)
+    ResponseEntity<ProblemDetail> authValidation(AuthValidationException exception) {
+        return problem(HttpStatus.BAD_REQUEST, "Authentication error", exception.getMessage());
     }
 
     @ExceptionHandler({IllegalArgumentException.class, ConstraintViolationException.class})

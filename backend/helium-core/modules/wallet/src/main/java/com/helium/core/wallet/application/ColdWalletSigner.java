@@ -1,6 +1,5 @@
 package com.helium.core.wallet.application;
 
-import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -14,25 +13,17 @@ public class ColdWalletSigner implements CustodyProvider {
     private static final Logger log = LoggerFactory.getLogger(ColdWalletSigner.class);
 
     @Override
-    public String generateAddress(String asset, UUID userId) {
-        log.debug("Generating cold wallet address for user {} on asset {}", userId, asset);
-        return "cold-" + asset.toLowerCase() + "-" + UUID.randomUUID().toString().substring(0, 8);
-    }
-
-    @Override
-    public byte[] signTransaction(byte[] unsignedTx) {
-        log.warn("Attempting to sign transaction using Cold Wallet. This requires multi-sig approval!");
-        // Integration point with Fireblocks / Copper / Hardware wallets
-        return unsignedTx;
+    public SigningResult sign(SigningRequest request) {
+        throw new UnsupportedOperationException("Cold wallet signing requires a configured multi-sig/HSM provider");
     }
 
     @Override
     public boolean isHealthy() {
-        return true;
+        return false;
     }
 
     @Override
-    public String getProviderName() {
+    public String providerName() {
         return "Helium-ColdWallet-MultiSig";
     }
 }

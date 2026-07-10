@@ -30,13 +30,14 @@ public class SecurityAuditService {
         SecurityContextData context,
         String details
     ) {
+        SecurityContextData safeContext = context == null ? SecurityContextData.system() : context;
         repository.save(SecurityAuditEvent.record(
             eventType,
             userId,
             sessionId,
             trustedActorProvider.currentActorId(),
-            context.ipAddress(),
-            context.userAgent(),
+            safeContext.ipAddress(),
+            safeContext.userAgent(),
             details,
             clock.instant()
         ));

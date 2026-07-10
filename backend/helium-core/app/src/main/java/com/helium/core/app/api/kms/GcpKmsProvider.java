@@ -12,16 +12,12 @@ public class GcpKmsProvider implements KmsProvider {
 
     @Override
     public byte[] encrypt(byte[] plaintext) {
-        log.debug("Encrypting payload via GCP KMS");
-        // GCP KMS integration stub
-        return plaintext;
+        throw new UnsupportedOperationException("Google Cloud KMS encryption is not configured");
     }
 
     @Override
     public byte[] decrypt(byte[] ciphertext) {
-        log.debug("Decrypting payload via GCP KMS");
-        // GCP KMS integration stub
-        return ciphertext;
+        throw new UnsupportedOperationException("Google Cloud KMS decryption is not configured");
     }
 
     @Override

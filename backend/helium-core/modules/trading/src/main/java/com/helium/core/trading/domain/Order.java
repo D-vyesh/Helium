@@ -162,6 +162,12 @@ public class Order {
         if (limitPrice == null) {
             throw new TradingValidationException("order requires price for reservation");
         }
+        if (limitPrice.scale() > market.priceScale()) {
+            throw new TradingValidationException("price increment is invalid for market");
+        }
+        if (quantity.scale() > market.quantityScale()) {
+            throw new TradingValidationException("quantity increment is invalid for market");
+        }
         if (quantity.compareTo(market.minOrderQuantity()) < 0) {
             throw new TradingValidationException("order quantity is below market minimum");
         }

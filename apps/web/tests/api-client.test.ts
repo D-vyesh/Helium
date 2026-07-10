@@ -5,8 +5,8 @@ async function apiClientContracts() {
   const session: SessionUser = await heliumApi.session();
   const balances: Balance[] = await heliumApi.balances();
   const markets: MarketView[] = await heliumApi.markets();
-  const ticker: TickerResponse = await heliumApi.ticker("BTC-USD");
-  const book: OrderBookView = await heliumApi.orderBook("BTC-USD");
+  const ticker: TickerResponse = await heliumApi.ticker("BTCUSDT");
+  const book: OrderBookView = await heliumApi.orderBook("BTCUSDT");
   const orders: OrderView[] = await heliumApi.openOrders();
 
   return {

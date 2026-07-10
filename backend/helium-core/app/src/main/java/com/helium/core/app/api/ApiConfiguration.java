@@ -36,7 +36,7 @@ public class ApiConfiguration {
         configuration.setAllowedHeaders(List.of(
             "Authorization", "Content-Type", "X-Requested-With",
             "X-API-Key", "X-API-Signature", "X-API-Timestamp", "X-API-Nonce", "X-API-Body-SHA256",
-            "X-Correlation-ID"
+            "X-Correlation-ID", "X-Session-Token"
         ));
         configuration.setExposedHeaders(List.of(
             "X-Correlation-ID", "X-RateLimit-Remaining", "X-RateLimit-Reset"
@@ -79,7 +79,7 @@ public class ApiConfiguration {
                 .requestMatchers("/api/v1/wallet/**", "/api/v1/wallets/withdraw/**").hasAnyAuthority("SCOPE_WITHDRAW", "ROLE_USER")
                 // All other authenticated API endpoints require at least SCOPE_READ
                 .requestMatchers("/api/**").hasAnyAuthority("SCOPE_READ", "ROLE_USER")
-                .anyRequest().permitAll()
+                .anyRequest().denyAll()
             )
             .httpBasic(basic -> basic.disable())
             .formLogin(login -> login.disable())

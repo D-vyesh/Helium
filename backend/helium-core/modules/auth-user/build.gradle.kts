@@ -11,6 +11,8 @@ dependencies {
     implementation("org.springframework.security:spring-security-core")
     implementation("org.springframework.security:spring-security-crypto")
     implementation("org.bouncycastle:bcprov-jdk18on:1.80")
+    implementation("com.google.zxing:core:3.5.3")
+    implementation("com.google.zxing:javase:3.5.3")
     testImplementation(project(":shared:test-support"))
     testImplementation("org.springframework.boot:spring-boot-starter-test")
 }

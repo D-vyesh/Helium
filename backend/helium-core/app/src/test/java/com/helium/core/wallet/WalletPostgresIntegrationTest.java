@@ -9,6 +9,7 @@ import com.helium.core.authuser.application.RegistrationCommand;
 import com.helium.core.authuser.application.RegistrationPort;
 import com.helium.core.authuser.application.RegistrationResult;
 import com.helium.core.authuser.application.SecurityContextData;
+import com.helium.core.authuser.CapturingEmailService;
 import com.helium.core.authuser.application.TrustedSystemActorAuthentication;
 import com.helium.core.authuser.domain.Role;
 import com.helium.core.wallet.application.AddressPort;
@@ -164,7 +165,7 @@ class WalletPostgresIntegrationTest {
         DepositView posted = depositPort.updateConfirmations(new UpdateDepositConfirmationsCommand(detected.depositId(), 20));
 
         assertThat(detected.status()).isEqualTo(DepositStatus.DETECTED);
-        assertThat(posted.status()).isEqualTo(DepositStatus.POSTED);
+        assertThat(posted.status()).isEqualTo(DepositStatus.POSTED_TO_LEDGER);
         assertThat(replay.depositId()).isEqualTo(detected.depositId());
         assertThat(countRows("wallet_chain_transaction_observations")).isEqualTo(1);
         assertThat(countRows("ledger_transactions")).isEqualTo(1);
@@ -565,7 +566,7 @@ class WalletPostgresIntegrationTest {
     private UUID activeUser(String email) {
         SecurityContextHolder.clearContext();
         RegistrationResult result = registrationPort.register(new RegistrationCommand(email, "Wallet User", PASSWORD, AUTH_CONTEXT));
-        emailVerificationPort.verify(result.emailVerificationToken(), AUTH_CONTEXT);
+        emailVerificationPort.verify(CapturingEmailService.verificationToken(email), AUTH_CONTEXT);
         return result.userId();
     }
 
@@ -595,7 +596,7 @@ class WalletPostgresIntegrationTest {
             new BigDecimal(amount)
         ));
         DepositView posted = depositPort.updateConfirmations(new UpdateDepositConfirmationsCommand(detected.depositId(), 20));
-        assertThat(posted.status()).isEqualTo(DepositStatus.POSTED);
+        assertThat(posted.status()).isEqualTo(DepositStatus.POSTED_TO_LEDGER);
         return userId;
     }
 

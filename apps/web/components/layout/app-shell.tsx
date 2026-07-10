@@ -2,6 +2,8 @@
 
 import { Button } from "@/components/ui/button";
 import { Dropdown, DropdownItem } from "@/components/ui/dropdown";
+import { CommandPalette } from "@/components/layout/command-palette";
+import { NotificationCenter } from "@/components/layout/notification-center";
 import { useAuthStore } from "@/features/auth/store";
 import { heliumApi } from "@/lib/api/client";
 import { cn } from "@/lib/utils/cn";
@@ -77,6 +79,8 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             ) : null}
           </nav>
           <div className="flex items-center gap-2">
+            <CommandPalette />
+            <NotificationCenter />
             <Dropdown label={<span className="max-w-[160px] truncate">{user?.email ?? "Account"}</span>}>
               <DropdownItem onClick={() => router.push("/settings")}>Settings</DropdownItem>
               <DropdownItem onClick={() => logout.mutate()}>Logout</DropdownItem>

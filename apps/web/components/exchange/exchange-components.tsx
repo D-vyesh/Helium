@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils/cn";
 import { formatAmount, shortTime } from "@/lib/utils/format";
-import type { Balance, CandleResponse, PublicTrade, TickerResponse, WithdrawalRecord } from "@/lib/api/types";
+import type { Balance, PublicTrade, TickerResponse, WithdrawalRecord } from "@/lib/api/types";
 
 export function PriceChangeBadge({ openPrice, lastPrice }: Readonly<{ openPrice: number; lastPrice: number }>) {
   if (!openPrice) {
@@ -59,39 +59,6 @@ export function WalletBalanceCard({ label, value, detail }: Readonly<{ label: st
         <p className="text-micro font-semibold uppercase text-muted-foreground">{label}</p>
         <p className="mt-2 font-mono text-2xl font-semibold text-foreground">{value}</p>
         {detail ? <p className="mt-2 text-xs text-muted-foreground">{detail}</p> : null}
-      </CardContent>
-    </Card>
-  );
-}
-
-export function CandlestickChart({ candles }: Readonly<{ candles: CandleResponse[] }>) {
-  const highs = candles.map((candle) => candle.high);
-  const lows = candles.map((candle) => candle.low);
-  const high = Math.max(...highs, 1);
-  const low = Math.min(...lows, 0);
-  const range = Math.max(high - low, Number.EPSILON);
-  return (
-    <Card className="terminal-grid">
-      <CardHeader>
-        <CardTitle>Candles</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="flex h-72 items-end gap-2 overflow-hidden px-2 pb-2">
-          {candles.map((candle) => {
-            const up = candle.close >= candle.open;
-            const wickHeight = Math.max(18, ((candle.high - candle.low) / range) * 240);
-            const bodyHeight = Math.max(8, (Math.abs(candle.close - candle.open) / range) * 240);
-            return (
-              <div className="flex min-w-5 flex-1 flex-col items-center justify-end" key={candle.openTime}>
-                <div className="relative flex justify-center" style={{ height: wickHeight }}>
-                  <span className={cn("absolute h-full w-px", up ? "bg-emerald-300/80" : "bg-red-300/80")} />
-                  <span className={cn("absolute bottom-1/2 w-3 rounded-sm", up ? "bg-emerald-300" : "bg-red-300")} style={{ height: bodyHeight }} />
-                </div>
-                <span className="mt-2 text-micro text-muted-foreground">{shortTime(candle.openTime)}</span>
-              </div>
-            );
-          })}
-        </div>
       </CardContent>
     </Card>
   );

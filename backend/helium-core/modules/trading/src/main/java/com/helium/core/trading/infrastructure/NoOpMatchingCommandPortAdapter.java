@@ -5,7 +5,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 @Service
-@Profile({"dev", "local", "test"})
+@Profile("no-matching")
 public class NoOpMatchingCommandPortAdapter implements MatchingCommandPort {
     @Override
     public void submitOrder(SubmitOrderCommand command) {

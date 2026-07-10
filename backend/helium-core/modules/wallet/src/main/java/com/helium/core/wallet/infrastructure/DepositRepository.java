@@ -4,6 +4,8 @@ import com.helium.core.wallet.domain.Deposit;
 import com.helium.core.wallet.domain.DepositStatus;
 import jakarta.persistence.LockModeType;
 import java.math.BigDecimal;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -13,6 +15,8 @@ import org.springframework.data.repository.query.Param;
 
 public interface DepositRepository extends JpaRepository<Deposit, UUID> {
     Optional<Deposit> findByNetworkCodeAndTxHashAndOutputIndex(String networkCode, String txHash, int outputIndex);
+
+    List<Deposit> findAllByNetworkCodeAndStatusIn(String networkCode, Collection<DepositStatus> statuses);
 
     long countByAssetCodeAndNetworkCodeAndStatus(String assetCode, String networkCode, DepositStatus status);
 

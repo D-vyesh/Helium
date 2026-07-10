@@ -25,6 +25,17 @@ spring:
   threads:
     virtual:
       enabled: true
+  mail:
+    host: ${HELIUM_SMTP_HOST:localhost}
+    port: ${HELIUM_SMTP_PORT:1025}
+    username: ${HELIUM_SMTP_USERNAME:}
+    password: ${HELIUM_SMTP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${HELIUM_SMTP_AUTH:false}
+          starttls:
+            enable: ${HELIUM_SMTP_STARTTLS:false}
 
 server:
   port: ${HELIUM_HTTP_PORT:8080}
@@ -53,6 +64,14 @@ management:
 
 helium:
   environment: ${HELIUM_ENVIRONMENT:local}
+  email:
+    enabled: ${HELIUM_EMAIL_ENABLED:true}
+    from-address: ${HELIUM_EMAIL_FROM:noreply@helium.exchange}
+    from-name: ${HELIUM_EMAIL_FROM_NAME:HELIUM Exchange}
+    base-url: ${HELIUM_EMAIL_BASE_URL:http://localhost:3000}
+  auth:
+    totp-encryption-key: ${HELIUM_TOTP_ENCRYPTION_KEY:local-totp-encryption-key-32bytes!!}
+    jwt-secret: ${HELIUM_JWT_SECRET:local-development-jwt-secret-change-me-minimum-32-bytes}
   secrets:
     backend: ${HELIUM_SECRETS_BACKEND:environment}
     refresh-interval-ms: ${HELIUM_SECRETS_REFRESH_MS:300000}
@@ -64,8 +83,46 @@ helium:
     signature-ttl: ${HELIUM_API_KEY_SIGNATURE_TTL:5m}
     nonce-ttl: ${HELIUM_API_KEY_NONCE_TTL:10m}
     default-lifetime: ${HELIUM_API_KEY_DEFAULT_LIFETIME:90d}
-  auth:
-    jwt-secret: ${HELIUM_JWT_SECRET:local-development-jwt-secret-change-me-minimum-32-bytes}
   outbox:
     enabled: ${HELIUM_OUTBOX_ENABLED:true}
     poll-interval-ms: ${HELIUM_OUTBOX_POLL_INTERVAL_MS:1000}
+  wallet:
+    custody:
+      eth:
+        from-address: ${HELIUM_ETH_CUSTODY_ADDRESS:}
+      sol:
+        fee-payer: ${HELIUM_SOL_FEE_PAYER:}
+      vault:
+        address: ${HELIUM_VAULT_ADDRESS:}
+        token: ${HELIUM_VAULT_TOKEN:}
+      offline:
+        response-directory: ${HELIUM_OFFLINE_CUSTODY_RESPONSE_DIRECTORY:}
+      signing:
+        max-retries: ${HELIUM_CUSTODY_SIGNING_MAX_RETRIES:5}
+        worker:
+          enabled: ${HELIUM_CUSTODY_SIGNING_WORKER_ENABLED:false}
+          poll-interval-ms: ${HELIUM_CUSTODY_SIGNING_POLL_INTERVAL_MS:5000}
+    builder:
+      worker:
+        enabled: ${HELIUM_WALLET_BUILDER_WORKER_ENABLED:false}
+        poll-interval-ms: ${HELIUM_WALLET_BUILDER_POLL_INTERVAL_MS:5000}
+    rpc:
+      btc:
+        nodes: ${HELIUM_BTC_RPC_NODES:}
+      eth:
+        nodes: ${HELIUM_ETH_RPC_NODES:}
+      sol:
+        nodes: ${HELIUM_SOL_RPC_NODES:}
+  market-data:
+    live:
+      enabled: ${HELIUM_MARKET_DATA_LIVE_ENABLED:true}
+      rest-base-url: ${HELIUM_BINANCE_REST_BASE_URL:https://api.binance.com}
+      websocket-base-url: ${HELIUM_BINANCE_WS_BASE_URL:wss://stream.binance.com:9443}
+      symbols: ${HELIUM_MARKET_DATA_SYMBOLS:BTCUSDT,ETHUSDT,SOLUSDT}
+      rest-timeout: ${HELIUM_MARKET_DATA_REST_TIMEOUT:5s}
+      reconnect-initial-delay: ${HELIUM_MARKET_DATA_RECONNECT_INITIAL_DELAY:1s}
+      reconnect-max-delay: ${HELIUM_MARKET_DATA_RECONNECT_MAX_DELAY:30s}
+      cache-ttl: ${HELIUM_MARKET_DATA_CACHE_TTL:20s}
+      order-book-limit: ${HELIUM_MARKET_DATA_ORDER_BOOK_LIMIT:100}
+      trade-limit: ${HELIUM_MARKET_DATA_TRADE_LIMIT:80}
+      candle-limit: ${HELIUM_MARKET_DATA_CANDLE_LIMIT:240}

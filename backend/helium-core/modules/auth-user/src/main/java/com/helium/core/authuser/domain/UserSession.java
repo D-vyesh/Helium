@@ -122,12 +122,32 @@ public class UserSession {
         return createdAt;
     }
 
+    public String ipAddress() {
+        return ipAddress;
+    }
+
+    public String userAgent() {
+        return userAgent;
+    }
+
+    public Instant lastSeenAt() {
+        return lastSeenAt;
+    }
+
     public SessionStatus status() {
         return status;
     }
 
     public Instant expiresAt() {
         return expiresAt;
+    }
+
+    public Instant revokedAt() {
+        return revokedAt;
+    }
+
+    public String revocationReason() {
+        return revocationReason;
     }
 
     private static String requireText(String value, String field, int maximumLength) {

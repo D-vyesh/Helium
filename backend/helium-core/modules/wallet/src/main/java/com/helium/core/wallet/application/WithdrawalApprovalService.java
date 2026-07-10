@@ -25,12 +25,14 @@ import com.helium.core.wallet.infrastructure.ChainTransactionObservationReposito
 import com.helium.core.wallet.infrastructure.WithdrawalRepository;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class WithdrawalApprovalService implements WithdrawalApprovalPort {
+    private static final Set<String> NATIVE_ASSETS = Set.of("BTC", "ETH", "SOL");
     private final WithdrawalRepository withdrawalRepository;
     private final BroadcastAttemptRepository broadcastAttemptRepository;
     private final ChainTransactionObservationRepository observationRepository;
@@ -42,6 +44,8 @@ public class WithdrawalApprovalService implements WithdrawalApprovalPort {
     private final WalletLedgerAccounts ledgerAccounts;
     private final LedgerPostingPort ledgerPostingPort;
     private final WalletAuditService auditService;
+    private final WithdrawalAuthorizationService withdrawalAuthorizationService;
+    private final WithdrawalQueueService withdrawalQueueService;
     private final java.time.Clock clock;
 
     public WithdrawalApprovalService(
@@ -56,6 +60,8 @@ public class WithdrawalApprovalService implements WithdrawalApprovalPort {
         WalletLedgerAccounts ledgerAccounts,
         LedgerPostingPort ledgerPostingPort,
         WalletAuditService auditService,
+        WithdrawalAuthorizationService withdrawalAuthorizationService,
+        WithdrawalQueueService withdrawalQueueService,
         java.time.Clock clock
     ) {
         this.withdrawalRepository = withdrawalRepository;
@@ -69,6 +75,8 @@ public class WithdrawalApprovalService implements WithdrawalApprovalPort {
         this.ledgerAccounts = ledgerAccounts;
         this.ledgerPostingPort = ledgerPostingPort;
         this.auditService = auditService;
+        this.withdrawalAuthorizationService = withdrawalAuthorizationService;
+        this.withdrawalQueueService = withdrawalQueueService;
         this.clock = clock;
     }
 
@@ -79,7 +87,9 @@ public class WithdrawalApprovalService implements WithdrawalApprovalPort {
         Withdrawal withdrawal = withdrawalForUpdate(command.withdrawalId());
         requireActiveWithdrawalUser(withdrawal);
         requirePayoutPolicy(withdrawal);
+        withdrawalAuthorizationService.requireConfirmed(withdrawal);
         withdrawal.approve(actorId, clock.instant());
+        withdrawalQueueService.markApproved(withdrawal, actorId);
         auditService.record(WalletAuditEventType.WITHDRAWAL_APPROVED, withdrawal.id(), actorId, withdrawal.clientRequestId());
         return toView(withdrawal);
     }
@@ -103,6 +113,9 @@ public class WithdrawalApprovalService implements WithdrawalApprovalPort {
         Withdrawal withdrawal = withdrawalForUpdate(command.withdrawalId());
         requireActiveWithdrawalUser(withdrawal);
         requirePayoutPolicy(withdrawal);
+        if (NATIVE_ASSETS.contains(withdrawal.assetCode())) {
+            throw new WalletValidationException("native withdrawals must be broadcast by the wallet broadcaster");
+        }
         int attemptNumber = broadcastAttemptRepository.countByWithdrawalId(withdrawal.id()) + 1;
         broadcastAttemptRepository.save(BroadcastAttempt.recorded(
             withdrawal.id(),

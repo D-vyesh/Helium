@@ -1,6 +1,7 @@
 package com.helium.core.authuser.application;
 
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 
 public interface SessionPort {
@@ -13,4 +14,8 @@ public interface SessionPort {
     void logoutAll(String rawToken, SecurityContextData securityContext);
 
     void revokeAll(UUID userId, String reason, SecurityContextData securityContext);
+
+    List<SessionDetails> sessions(UUID userId, String currentSessionToken);
+
+    void revoke(UUID userId, UUID sessionId, SecurityContextData securityContext);
 }

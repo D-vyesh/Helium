@@ -2,12 +2,14 @@ package com.helium.core.wallet.infrastructure.rpc;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -23,24 +25,22 @@ public class RpcNodeManager {
     // Node URL -> Last Failure Time
     private final Map<String, Instant> lastFailure = new ConcurrentHashMap<>();
 
-    public RpcNodeManager() {
-        // In a real setup, these would come from properties/config
-        networkNodes.put("ETH", List.of(
-            "https://eth-mainnet.alchemyapi.io/v2/dummy",
-            "https://mainnet.infura.io/v3/dummy",
-            "https://powerful-spring-butterfly.quiknode.pro/dummy/"
-        ));
-        networkNodes.put("BTC", List.of(
-            "http://localhost:18443",
-            "https://btc.quicknode.pro/dummy/"
-        ));
-        networkNodes.put("SOL", List.of(
-            "https://api.mainnet-beta.solana.com",
-            "https://solana-mainnet.alchemyapi.io/v2/dummy"
-        ));
+    public RpcNodeManager(Environment environment) {
+        registerNodes("ETH", environment.getProperty("helium.wallet.rpc.eth.nodes", ""));
+        registerNodes("BTC", environment.getProperty("helium.wallet.rpc.btc.nodes", ""));
+        registerNodes("SOL", environment.getProperty("helium.wallet.rpc.sol.nodes", ""));
 
         // Initialize all nodes to max health
         networkNodes.values().forEach(nodes -> nodes.forEach(node -> nodeHealth.put(node, 100)));
+    }
+
+    private void registerNodes(String networkId, String rawNodes) {
+        List<String> nodes = Arrays.stream(rawNodes.split(","))
+            .map(String::trim)
+            .filter(node -> !node.isBlank())
+            .distinct()
+            .toList();
+        networkNodes.put(networkId, nodes);
     }
 
     public String getPrimaryNode(String networkId) {

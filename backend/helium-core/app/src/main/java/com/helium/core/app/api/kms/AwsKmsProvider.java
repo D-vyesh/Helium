@@ -12,16 +12,12 @@ public class AwsKmsProvider implements KmsProvider {
 
     @Override
     public byte[] encrypt(byte[] plaintext) {
-        log.debug("Encrypting payload via AWS KMS");
-        // AWS KMS integration stub
-        return plaintext;
+        throw new UnsupportedOperationException("AWS KMS encryption is not configured");
     }
 
     @Override
     public byte[] decrypt(byte[] ciphertext) {
-        log.debug("Decrypting payload via AWS KMS");
-        // AWS KMS integration stub
-        return ciphertext;
+        throw new UnsupportedOperationException("AWS KMS decryption is not configured");
     }
 
     @Override

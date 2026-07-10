@@ -12,13 +12,10 @@ public class ExchangeOperationsController {
 
     @GetMapping("/health/rpc-nodes")
     public ResponseEntity<Map<String, Object>> getRpcHealth() {
-        return ResponseEntity.ok(Map.of(
-            "status", "HEALTHY",
-            "activeNodes", Map.of(
-                "ETH", "https://mainnet.infura.io/v3/dummy",
-                "BTC", "http://localhost:18443",
-                "SOL", "https://api.mainnet-beta.solana.com"
-            )
+        return ResponseEntity.status(503).body(Map.of(
+            "status", "UNCONFIGURED",
+            "message", "Configure helium.wallet.rpc.btc.nodes, helium.wallet.rpc.eth.nodes, and helium.wallet.rpc.sol.nodes with real RPC endpoints",
+            "activeNodes", Map.of()
         ));
     }
 

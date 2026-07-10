@@ -20,4 +20,9 @@ public interface UserSessionRepository extends JpaRepository<UserSession, UUID> 
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     List<UserSession> findAllByUserIdAndStatus(UUID userId, SessionStatus status);
+
+    List<UserSession> findAllByUserIdOrderByCreatedAtDesc(UUID userId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    Optional<UserSession> findByIdAndUserId(UUID id, UUID userId);
 }

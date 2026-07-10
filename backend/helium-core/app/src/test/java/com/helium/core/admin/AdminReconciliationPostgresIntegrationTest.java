@@ -13,6 +13,7 @@ import com.helium.core.authuser.application.RegistrationCommand;
 import com.helium.core.authuser.application.RegistrationPort;
 import com.helium.core.authuser.application.RegistrationResult;
 import com.helium.core.authuser.application.SecurityContextData;
+import com.helium.core.authuser.CapturingEmailService;
 import com.helium.core.authuser.domain.Role;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -179,7 +180,7 @@ class AdminReconciliationPostgresIntegrationTest {
 
     private RegistrationResult registerAndVerify(String email) {
         RegistrationResult result = registrationPort.register(new RegistrationCommand(email, "Admin Test", PASSWORD, CONTEXT));
-        emailVerificationPort.verify(result.emailVerificationToken(), CONTEXT);
+        emailVerificationPort.verify(CapturingEmailService.verificationToken(email), CONTEXT);
         return result;
     }
 

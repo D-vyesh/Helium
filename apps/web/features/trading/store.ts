@@ -8,6 +8,6 @@ type TradingState = {
 };
 
 export const useTradingStore = create<TradingState>((set) => ({
-  selectedMarket: "BTC-USD",
+  selectedMarket: "BTCUSDT",
   setSelectedMarket: (market) => set({ selectedMarket: market })
 }));

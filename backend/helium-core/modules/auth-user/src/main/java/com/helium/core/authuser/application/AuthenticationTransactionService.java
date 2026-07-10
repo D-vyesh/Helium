@@ -1,6 +1,7 @@
 package com.helium.core.authuser.application;
 
 import com.helium.core.authuser.domain.Credential;
+import com.helium.core.authuser.domain.MfaSession;
 import com.helium.core.authuser.domain.MfaStatus;
 import com.helium.core.authuser.domain.Role;
 import com.helium.core.authuser.domain.SecurityAuditEventType;
@@ -9,6 +10,7 @@ import com.helium.core.authuser.domain.UserAccountStatus;
 import com.helium.core.authuser.domain.UserSession;
 import com.helium.core.authuser.infrastructure.CredentialRepository;
 import com.helium.core.authuser.infrastructure.MfaMethodRepository;
+import com.helium.core.authuser.infrastructure.MfaSessionRepository;
 import com.helium.core.authuser.infrastructure.RoleGrantRepository;
 import com.helium.core.authuser.infrastructure.UserAccountRepository;
 import com.helium.core.authuser.infrastructure.UserSessionRepository;
@@ -33,6 +35,7 @@ public class AuthenticationTransactionService {
     private final UserSessionRepository sessionRepository;
     private final RoleGrantRepository roleGrantRepository;
     private final MfaMethodRepository mfaMethodRepository;
+    private final MfaSessionRepository mfaSessionRepository;
     private final SessionService sessionService;
     private final LoginAttemptThrottleService throttleService;
     private final LoginAttemptHistoryService loginAttemptHistoryService;
@@ -46,6 +49,7 @@ public class AuthenticationTransactionService {
         UserSessionRepository sessionRepository,
         RoleGrantRepository roleGrantRepository,
         MfaMethodRepository mfaMethodRepository,
+        MfaSessionRepository mfaSessionRepository,
         SessionService sessionService,
         LoginAttemptThrottleService throttleService,
         LoginAttemptHistoryService loginAttemptHistoryService,
@@ -58,6 +62,7 @@ public class AuthenticationTransactionService {
         this.sessionRepository = sessionRepository;
         this.roleGrantRepository = roleGrantRepository;
         this.mfaMethodRepository = mfaMethodRepository;
+        this.mfaSessionRepository = mfaSessionRepository;
         this.sessionService = sessionService;
         this.throttleService = throttleService;
         this.loginAttemptHistoryService = loginAttemptHistoryService;
@@ -114,9 +119,12 @@ public class AuthenticationTransactionService {
         throttleService.clear(email, context.ipAddress());
         account.recordSuccessfulLogin(now);
         if (mfaMethodRepository.existsByUserIdAndStatus(userId, MfaStatus.ENABLED)) {
+            // Issue a short-lived MFA session token; the client must complete the TOTP challenge
+            TokenValue mfaToken = tokenCodec.generate();
+            mfaSessionRepository.save(MfaSession.create(userId, mfaToken.tokenHash(), now));
             loginAttemptHistoryService.record(userId, email, false, "MFA_REQUIRED", context);
             auditService.record(SecurityAuditEventType.AUTH_LOGIN_FAILED, userId, null, context, "MFA_REQUIRED");
-            return LoginResult.failed(LoginFailureReason.MFA_REQUIRED);
+            return LoginResult.mfaRequired(userId, mfaToken.rawToken());
         }
 
         TokenValue token = tokenCodec.generate();

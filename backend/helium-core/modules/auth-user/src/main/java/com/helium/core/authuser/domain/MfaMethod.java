@@ -52,7 +52,18 @@ public class MfaMethod {
         return new MfaMethod(userId, MfaType.TOTP, now);
     }
 
-    public MfaStatus status() {
-        return status;
+    public void enable(Instant now) {
+        if (this.status == MfaStatus.ENABLED) return;
+        this.status = MfaStatus.ENABLED;
+        this.enabledAt = Objects.requireNonNull(now, "now");
     }
+
+    public void disable(Instant now) {
+        this.status = MfaStatus.DISABLED;
+        this.disabledAt = Objects.requireNonNull(now, "now");
+    }
+
+    public UUID userId() { return userId; }
+    public MfaType type() { return type; }
+    public MfaStatus status() { return status; }
 }

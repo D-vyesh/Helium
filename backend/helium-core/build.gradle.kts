@@ -4,6 +4,8 @@ plugins {
     id("io.spring.dependency-management") version "1.1.7" apply false
 }
 
+import java.io.File
+
 group = "com.helium"
 version = "0.1.0-SNAPSHOT"
 
@@ -30,6 +32,15 @@ subprojects {
 
     tasks.withType<Test>().configureEach {
         useJUnitPlatform()
+        val path = System.getenv("PATH")
+        if (path != null) {
+            environment(
+                "PATH",
+                path.split(File.pathSeparator)
+                    .filterNot { it.startsWith("\"") && it.endsWith("\"") }
+                    .joinToString(File.pathSeparator)
+            )
+        }
     }
 
     dependencies {

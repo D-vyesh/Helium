@@ -36,6 +36,9 @@ public class WithdrawalRequestService implements WithdrawalRequestPort {
     private final WalletLedgerAccounts ledgerAccounts;
     private final LedgerPostingPort ledgerPostingPort;
     private final WalletAuditService auditService;
+    private final WithdrawalAddressValidator withdrawalAddressValidator;
+    private final WithdrawalAuthorizationService withdrawalAuthorizationService;
+    private final WithdrawalQueueService withdrawalQueueService;
     private final Clock clock;
 
     public WithdrawalRequestService(
@@ -48,6 +51,9 @@ public class WithdrawalRequestService implements WithdrawalRequestPort {
         WalletLedgerAccounts ledgerAccounts,
         LedgerPostingPort ledgerPostingPort,
         WalletAuditService auditService,
+        WithdrawalAddressValidator withdrawalAddressValidator,
+        WithdrawalAuthorizationService withdrawalAuthorizationService,
+        WithdrawalQueueService withdrawalQueueService,
         Clock clock
     ) {
         this.withdrawalRepository = withdrawalRepository;
@@ -59,6 +65,9 @@ public class WithdrawalRequestService implements WithdrawalRequestPort {
         this.ledgerAccounts = ledgerAccounts;
         this.ledgerPostingPort = ledgerPostingPort;
         this.auditService = auditService;
+        this.withdrawalAddressValidator = withdrawalAddressValidator;
+        this.withdrawalAuthorizationService = withdrawalAuthorizationService;
+        this.withdrawalQueueService = withdrawalQueueService;
         this.clock = clock;
     }
 
@@ -83,11 +92,12 @@ public class WithdrawalRequestService implements WithdrawalRequestPort {
         if (amount.compareTo(network.minimumWithdrawal()) < 0) {
             throw new WalletValidationException("withdrawal amount is below network minimum");
         }
+        String destinationAddress = withdrawalAddressValidator.validate(asset.code(), network.networkCode(), command.destinationAddress());
         String requestHash = WalletHash.withdrawalRequestHash(
             userId,
             asset.code(),
             network.networkCode(),
-            command.destinationAddress(),
+            destinationAddress,
             command.destinationMemo(),
             amount,
             network.withdrawalFee()
@@ -109,7 +119,7 @@ public class WithdrawalRequestService implements WithdrawalRequestPort {
             userId,
             asset.code(),
             network.networkCode(),
-            command.destinationAddress(),
+            destinationAddress,
             command.destinationMemo(),
             amount,
             network.withdrawalFee(),
@@ -117,6 +127,8 @@ public class WithdrawalRequestService implements WithdrawalRequestPort {
             clock.instant()
         ));
         auditService.record(WalletAuditEventType.WITHDRAWAL_REQUESTED, withdrawal.id(), actorId, clientRequestId);
+        withdrawalQueueService.enqueueIfRequired(withdrawal, actorId);
+        withdrawalAuthorizationService.issueIfRequired(withdrawal);
         return WithdrawalApprovalService.toView(withdrawal);
     }
 

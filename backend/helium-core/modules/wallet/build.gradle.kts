@@ -7,9 +7,12 @@ dependencies {
     implementation(project(":modules:auth-user"))
     implementation(project(":modules:compliance-lite"))
     implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("io.micrometer:micrometer-core")
 
     implementation("org.web3j:core:4.10.3")
     implementation("org.bitcoinj:bitcoinj-core:0.16.2")
+    implementation("com.google.zxing:core:3.5.3")
+    implementation("com.google.zxing:javase:3.5.3")
     
     implementation(project(":modules:ledger"))
     implementation(project(":modules:outbox"))

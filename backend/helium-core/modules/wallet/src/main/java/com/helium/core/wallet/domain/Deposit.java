@@ -62,6 +62,12 @@ public class Deposit {
     @Column(name = "posted_at")
     private Instant postedAt;
 
+    @Column(name = "reorged_at")
+    private Instant reorgedAt;
+
+    @Column(name = "failure_reason", length = 120)
+    private String failureReason;
+
     @Version
     @Column(name = "version", nullable = false)
     private long version;
@@ -99,6 +105,9 @@ public class Deposit {
         this.status = DepositStatus.DETECTED;
         this.detectedAt = Objects.requireNonNull(now, "now");
         this.confirmedAt = null;
+        this.postedAt = null;
+        this.reorgedAt = null;
+        this.failureReason = null;
     }
 
     public static Deposit detect(
@@ -126,43 +135,59 @@ public class Deposit {
     }
 
     public void updateConfirmations(int nextConfirmations, Instant now) {
-        if (status == DepositStatus.POSTED || status == DepositStatus.REJECTED) {
+        if (status == DepositStatus.POSTED_TO_LEDGER || status == DepositStatus.FAILED || status == DepositStatus.REORGED) {
             return;
         }
         if (nextConfirmations < 0) {
-            this.confirmations = 0;
-            return;
-        }
-        if (nextConfirmations < confirmations) {
-            // Reorgs can legitimately reduce confirmations.
-            this.confirmations = nextConfirmations;
-            return;
+            throw new WalletValidationException("confirmation updates cannot be negative");
         }
         confirmations = nextConfirmations;
-        if (confirmations >= requiredConfirmations && status == DepositStatus.DETECTED) {
+        if (confirmations >= requiredConfirmations) {
             status = DepositStatus.CONFIRMED;
             confirmedAt = Objects.requireNonNull(now, "now");
+            return;
         }
+        if (status == DepositStatus.CONFIRMED) {
+            confirmedAt = null;
+        }
+        status = DepositStatus.PENDING_CONFIRMATIONS;
     }
 
     public void markPosted(UUID ledgerTransactionId, Instant now) {
-        if (status == DepositStatus.POSTED) {
+        if (status == DepositStatus.POSTED_TO_LEDGER) {
             return;
         }
         if (status != DepositStatus.CONFIRMED) {
             throw new WalletValidationException("only confirmed deposits can be posted");
         }
         this.ledgerTransactionId = Objects.requireNonNull(ledgerTransactionId, "ledgerTransactionId");
-        this.status = DepositStatus.POSTED;
+        this.status = DepositStatus.POSTED_TO_LEDGER;
         this.postedAt = Objects.requireNonNull(now, "now");
     }
 
     public void markFailed(Instant now, String reason) {
-        if (status == DepositStatus.POSTED) {
-            return; // Can't fail if already posted, requires manual reversal
+        if (status == DepositStatus.POSTED_TO_LEDGER) {
+            throw new WalletValidationException("posted deposits must be reversed as a reorg");
         }
-        this.status = DepositStatus.REJECTED;
+        if (status == DepositStatus.FAILED || status == DepositStatus.REORGED) {
+            return;
+        }
+        this.status = DepositStatus.FAILED;
         this.confirmedAt = null;
+        this.failureReason = BlockchainNetwork.requireText(reason, "reason", 120);
+    }
+
+    public void markReorged(Instant now, String reason) {
+        if (status == DepositStatus.REORGED) {
+            return;
+        }
+        if (status == DepositStatus.FAILED) {
+            throw new WalletValidationException("failed deposits cannot be marked as reorged");
+        }
+        this.confirmations = 0;
+        this.status = DepositStatus.REORGED;
+        this.reorgedAt = Objects.requireNonNull(now, "now");
+        this.failureReason = BlockchainNetwork.requireText(reason, "reason", 120);
     }
 
     public UUID id() {

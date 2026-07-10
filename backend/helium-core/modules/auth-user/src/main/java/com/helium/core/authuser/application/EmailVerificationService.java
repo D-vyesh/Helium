@@ -22,6 +22,7 @@ public class EmailVerificationService implements EmailVerificationPort {
     private final EmailVerificationTokenRepository tokenRepository;
     private final TokenCodec tokenCodec;
     private final SecurityAuditService auditService;
+    private final EmailService emailService;
     private final Clock clock;
 
     public EmailVerificationService(
@@ -29,24 +30,34 @@ public class EmailVerificationService implements EmailVerificationPort {
         EmailVerificationTokenRepository tokenRepository,
         TokenCodec tokenCodec,
         SecurityAuditService auditService,
+        EmailService emailService,
         Clock clock
     ) {
         this.userAccountRepository = userAccountRepository;
         this.tokenRepository = tokenRepository;
         this.tokenCodec = tokenCodec;
         this.auditService = auditService;
+        this.emailService = emailService;
         this.clock = clock;
     }
 
     @Override
     @Transactional
-    public String issue(UUID userId, SecurityContextData securityContext) {
+    public void issue(UUID userId, SecurityContextData securityContext) {
+        issue(userId, "http://localhost:3000", securityContext);
+    }
+
+    @Override
+    @Transactional
+    public void issue(UUID userId, String baseUrl, SecurityContextData securityContext) {
         UserAccount account = userAccountRepository.findByIdForUpdate(userId)
             .orElseThrow(() -> new AuthValidationException("user account was not found"));
         if (account.emailVerifiedAt() != null || account.status() == UserAccountStatus.CLOSED) {
             throw new AuthValidationException("email verification is not available for this account");
         }
         Instant now = clock.instant();
+        // Invalidate any existing tokens before issuing a new one
+        tokenRepository.findAllByUserIdAndConsumedAtIsNull(account.id()).forEach(t -> t.invalidate(now));
         TokenValue token = tokenCodec.generate();
         tokenRepository.save(EmailVerificationToken.issue(userId, token.tokenHash(), TOKEN_LIFETIME, now));
         auditService.record(
@@ -56,7 +67,32 @@ public class EmailVerificationService implements EmailVerificationPort {
             securityContext,
             "email verification token issued"
         );
-        return token.rawToken();
+        String verificationUrl = baseUrl + "/email-verification?token=" + token.rawToken();
+        emailService.sendVerificationEmail(account.email(), account.displayName(), verificationUrl);
+    }
+
+    @Override
+    @Transactional
+    public void resend(String email, String baseUrl, SecurityContextData securityContext) {
+        UserAccount account = userAccountRepository.findByEmailForUpdate(UserAccount.normalizeEmail(email)).orElse(null);
+        if (account == null || account.emailVerifiedAt() != null || account.status() == UserAccountStatus.CLOSED) {
+            auditService.record(
+                SecurityAuditEventType.EMAIL_RESEND_REQUESTED,
+                account == null ? null : account.id(),
+                null,
+                securityContext,
+                "email verification resend accepted"
+            );
+            return;
+        }
+        issue(account.id(), baseUrl, securityContext);
+        auditService.record(
+            SecurityAuditEventType.EMAIL_RESEND_REQUESTED,
+            account.id(),
+            null,
+            securityContext,
+            "email verification resent"
+        );
     }
 
     @Override

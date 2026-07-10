@@ -9,6 +9,7 @@ import com.helium.core.authuser.application.RegistrationCommand;
 import com.helium.core.authuser.application.RegistrationPort;
 import com.helium.core.authuser.application.RegistrationResult;
 import com.helium.core.authuser.application.SecurityContextData;
+import com.helium.core.authuser.CapturingEmailService;
 import com.helium.core.authuser.domain.AuthValidationException;
 import com.helium.core.authuser.domain.Role;
 import com.helium.core.ledger.application.CreateLedgerAccountCommand;
@@ -539,7 +540,7 @@ class TradingPostgresIntegrationTest {
     private UUID activeUser(String email) {
         SecurityContextHolder.clearContext();
         RegistrationResult result = registrationPort.register(new RegistrationCommand(email, "Trading User", PASSWORD, CONTEXT));
-        emailVerificationPort.verify(result.emailVerificationToken(), CONTEXT);
+        emailVerificationPort.verify(CapturingEmailService.verificationToken(email), CONTEXT);
         return result.userId();
     }
 

@@ -1,7 +1,11 @@
 package com.helium.core.authuser.application;
 
-public record PasswordResetRequestResult(String rawToken) {
-    public static PasswordResetRequestResult accepted(String rawToken) {
-        return new PasswordResetRequestResult(rawToken);
+/**
+ * Result of a password reset request.
+ * The token is NEVER returned to the client — it is sent via email only.
+ */
+public record PasswordResetRequestResult(boolean requestAccepted) {
+    public static PasswordResetRequestResult accepted() {
+        return new PasswordResetRequestResult(true);
     }
 }

@@ -146,14 +146,13 @@ public class DepositService implements DepositPort {
             .orElseThrow(() -> new WalletValidationException("deposit has no chain observation"));
         if (command.confirmations() < 0) {
             log.warn("Reorg detected for deposit {}. TxHash dropped from chain.", deposit.id());
-            if (deposit.status() == DepositStatus.CONFIRMED) {
+            if (deposit.status() == DepositStatus.POSTED_TO_LEDGER) {
                 log.error("CRITICAL: Reorg dropped a CONFIRMED deposit! Issuing ledger reversal for {}", deposit.id());
                 reverseDeposit(deposit, actorId);
-                // Also trigger account freeze check if this reversal drove the balance negative
                 accountFreezeWorkflow.freezeAccountForNegativeBalance(deposit.userId(), "Deep Reorg Reversal: " + deposit.txHash());
             }
-            deposit.markFailed(clock.instant(), "REORG_DETECTED");
-            auditService.record(WalletAuditEventType.DEPOSIT_CONFIRMATIONS_UPDATED, deposit.id(), actorId, "REORG_DETECTED");
+            deposit.markReorged(clock.instant(), "REORG_DETECTED");
+            auditService.record(WalletAuditEventType.DEPOSIT_REORGED, deposit.id(), actorId, deposit.txHash());
             return toView(deposit);
         }
 
