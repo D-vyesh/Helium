@@ -19,6 +19,7 @@ import com.helium.core.authuser.application.TotpSetupResult;
 import com.helium.core.authuser.application.TrustedActorProvider;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -31,7 +32,6 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -108,19 +108,23 @@ public class AuthApiController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request, HttpServletRequest servletRequest) {
+    public Object login(
+        @Valid @RequestBody LoginRequest request,
+        HttpServletRequest servletRequest,
+        HttpServletResponse servletResponse
+    ) {
         LoginResult result = authenticationPort.login(new LoginCommand(request.email(), request.password(), ApiSecurity.context(servletRequest)));
         if (!result.authenticated()) {
             if (result.failureReason() == LoginFailureReason.MFA_REQUIRED) {
                 // Return MFA challenge — client must POST to /auth/mfa/totp/challenge
-                return ResponseEntity.ok(new MfaChallengeResponse(result.mfaSessionToken()));
+                return new MfaChallengeResponse(result.mfaSessionToken());
             }
             throw new ApiUnauthorizedException("authentication failed");
         }
-        return ResponseEntity.ok(buildLoginResponse(result));
+        return buildLoginResponse(result, servletResponse);
     }
 
-    private ResponseEntity<LoginResponse> buildLoginResponse(LoginResult result) {
+    private LoginResponse buildLoginResponse(LoginResult result, HttpServletResponse servletResponse) {
         JwtTokenService.IssuedAccessToken accessToken = jwtTokenService.issue(result.userId(), result.roles());
         ResponseCookie cookie = ResponseCookie.from(ApiSecurity.SESSION_COOKIE, result.sessionToken())
             .httpOnly(true)
@@ -130,17 +134,16 @@ public class AuthApiController {
             .maxAge(Duration.between(Instant.now(), result.expiresAt()).getSeconds())
             .build();
         Set<String> roles = roleNames(result.roles());
-        return ResponseEntity.ok()
-            .header(HttpHeaders.SET_COOKIE, cookie.toString())
-            .body(new LoginResponse(
-                accessToken.token(),
-                accessToken.expiresAt(),
-                result.sessionToken(),
-                result.sessionToken(),
-                result.expiresAt(),
-                readService.user(result.userId(), roles),
-                roles
-            ));
+        servletResponse.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+        return new LoginResponse(
+            accessToken.token(),
+            accessToken.expiresAt(),
+            result.sessionToken(),
+            result.sessionToken(),
+            result.expiresAt(),
+            readService.user(result.userId(), roles),
+            roles
+        );
     }
 
     @PostMapping("/refresh")
@@ -157,7 +160,11 @@ public class AuthApiController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout(@Valid @RequestBody LogoutRequest logoutRequest, HttpServletRequest request) {
+    public void logout(
+        @Valid @RequestBody LogoutRequest logoutRequest,
+        HttpServletRequest request,
+        HttpServletResponse response
+    ) {
         if (logoutRequest.allSessions()) {
             sessionPort.logoutAll(logoutRequest.refreshToken(), ApiSecurity.context(request));
         } else {
@@ -170,7 +177,8 @@ public class AuthApiController {
             .path("/")
             .maxAge(0)
             .build();
-        return ResponseEntity.noContent().header(HttpHeaders.SET_COOKIE, expired.toString()).build();
+        response.addHeader(HttpHeaders.SET_COOKIE, expired.toString());
+        response.setStatus(HttpServletResponse.SC_NO_CONTENT);
     }
 
     @PostMapping("/password-reset/request")
@@ -237,21 +245,29 @@ public class AuthApiController {
     }
 
     @PostMapping("/mfa/totp/challenge")
-    public ResponseEntity<LoginResponse> totpChallenge(@Valid @RequestBody TotpChallengeRequest request, HttpServletRequest servletRequest) {
+    public LoginResponse totpChallenge(
+        @Valid @RequestBody TotpChallengeRequest request,
+        HttpServletRequest servletRequest,
+        HttpServletResponse servletResponse
+    ) {
         LoginResult result = totpPort.completeChallenge(request.mfaSessionToken(), request.code(), ApiSecurity.context(servletRequest));
         if (!result.authenticated()) {
             throw new ApiUnauthorizedException("TOTP verification failed");
         }
-        return buildLoginResponse(result);
+        return buildLoginResponse(result, servletResponse);
     }
 
     @PostMapping("/mfa/totp/backup")
-    public ResponseEntity<LoginResponse> totpBackupCode(@Valid @RequestBody BackupCodeRequest request, HttpServletRequest servletRequest) {
+    public LoginResponse totpBackupCode(
+        @Valid @RequestBody BackupCodeRequest request,
+        HttpServletRequest servletRequest,
+        HttpServletResponse servletResponse
+    ) {
         LoginResult result = totpPort.completeWithBackupCode(request.mfaSessionToken(), request.backupCode(), ApiSecurity.context(servletRequest));
         if (!result.authenticated()) {
             throw new ApiUnauthorizedException("backup code verification failed");
         }
-        return buildLoginResponse(result);
+        return buildLoginResponse(result, servletResponse);
     }
 
     @GetMapping("/mfa/totp/backup-codes")

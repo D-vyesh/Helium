@@ -28,15 +28,18 @@ public class EthereumProvider implements BlockchainProvider {
 
     private final EthereumDepositScanner depositScanner;
     private final CircuitBreakerClient circuitBreaker;
+    private final EthereumRpcClient rpcClient;
     private final com.helium.core.wallet.infrastructure.HdWalletChainRepository hdWalletRepo;
     private final HdAddressGenerator hdGenerator;
 
     public EthereumProvider(EthereumDepositScanner depositScanner, 
                             CircuitBreakerClient circuitBreaker,
+                            EthereumRpcClient rpcClient,
                             com.helium.core.wallet.infrastructure.HdWalletChainRepository hdWalletRepo,
                             HdAddressGenerator hdGenerator) {
         this.depositScanner = depositScanner;
         this.circuitBreaker = circuitBreaker;
+        this.rpcClient = rpcClient;
         this.hdWalletRepo = hdWalletRepo;
         this.hdGenerator = hdGenerator;
     }
@@ -71,7 +74,7 @@ public class EthereumProvider implements BlockchainProvider {
 
     @Override
     public String broadcastTransaction(byte[] signedTx) {
-        return circuitBreaker.executeWithHedging("ETH", nodeUrl -> {
+        return circuitBreaker.executeWithFailover("ETH", nodeUrl -> {
             log.info("Broadcasting ETH transaction via node {}", nodeUrl);
             Web3j web3j = Web3j.build(new HttpService(nodeUrl));
             try {
@@ -83,7 +86,7 @@ public class EthereumProvider implements BlockchainProvider {
             } finally {
                 web3j.shutdown();
             }
-        }, 1_000);
+        });
     }
 
     @Override
@@ -114,7 +117,7 @@ public class EthereumProvider implements BlockchainProvider {
 
     @Override
     public long getLatestBlockHeight() {
-        return circuitBreaker.executeWithHedging("ETH", nodeUrl -> {
+        return circuitBreaker.executeLatestBlockWithHedging("ETH", nodeUrl -> {
             Web3j web3j = Web3j.build(new HttpService(nodeUrl));
             try {
                 return latestBlockNumber(web3j).longValueExact();
@@ -122,6 +125,11 @@ public class EthereumProvider implements BlockchainProvider {
                 web3j.shutdown();
             }
         }, 1_000);
+    }
+
+    @Override
+    public CanonicalBlockReference getCanonicalBlock(long height) {
+        return rpcClient.getCanonicalBlock(height);
     }
 
     private static BigInteger latestBlockNumber(Web3j web3j) throws java.io.IOException {

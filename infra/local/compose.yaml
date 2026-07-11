@@ -21,6 +21,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: helium-redis
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${HELIUM_REDIS_PASSWORD:-helium-redis-change-me}"]
     profiles:
       - redis
     ports:
@@ -28,7 +29,7 @@ services:
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${HELIUM_REDIS_PASSWORD:-helium-redis-change-me}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -36,4 +37,3 @@ services:
 volumes:
   postgres-data:
   redis-data:
-

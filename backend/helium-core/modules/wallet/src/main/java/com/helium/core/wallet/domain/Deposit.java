@@ -135,7 +135,8 @@ public class Deposit {
     }
 
     public void updateConfirmations(int nextConfirmations, Instant now) {
-        if (status == DepositStatus.POSTED_TO_LEDGER || status == DepositStatus.FAILED || status == DepositStatus.REORGED) {
+        if (status == DepositStatus.POSTED_TO_LEDGER || status == DepositStatus.FAILED || status == DepositStatus.REORGED
+            || status == DepositStatus.CHAIN_REVIEW_REQUIRED) {
             return;
         }
         if (nextConfirmations < 0) {
@@ -190,6 +191,17 @@ public class Deposit {
         this.failureReason = BlockchainNetwork.requireText(reason, "reason", 120);
     }
 
+    public void requireChainReview(Instant now, String reason) {
+        if (status == DepositStatus.CHAIN_REVIEW_REQUIRED) {
+            return;
+        }
+        if (status == DepositStatus.FAILED || status == DepositStatus.REORGED) {
+            throw new WalletValidationException("terminal deposits cannot be moved to chain review");
+        }
+        this.status = DepositStatus.CHAIN_REVIEW_REQUIRED;
+        this.failureReason = BlockchainNetwork.requireText(reason, "reason", 120);
+    }
+
     public UUID id() {
         return id;
     }
@@ -216,6 +228,10 @@ public class Deposit {
 
     public BigDecimal amount() {
         return amount;
+    }
+
+    public int confirmations() {
+        return confirmations;
     }
 
     public DepositStatus status() {

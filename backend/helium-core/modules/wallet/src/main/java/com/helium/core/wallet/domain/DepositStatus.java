@@ -5,6 +5,7 @@ public enum DepositStatus {
     PENDING_CONFIRMATIONS,
     CONFIRMED,
     POSTED_TO_LEDGER,
+    CHAIN_REVIEW_REQUIRED,
     FAILED,
     REORGED
 }

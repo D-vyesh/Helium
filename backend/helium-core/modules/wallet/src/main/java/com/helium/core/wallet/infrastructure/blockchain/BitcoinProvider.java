@@ -77,6 +77,11 @@ public class BitcoinProvider implements BlockchainProvider {
         return rpcClient.getBlockCount();
     }
 
+    @Override
+    public CanonicalBlockReference getCanonicalBlock(long height) {
+        return rpcClient.getCanonicalBlock(height);
+    }
+
     private Map<String, String> activeBitcoinAddresses() {
         return addressRepository.findAll().stream()
             .filter(address -> "BTC".equals(address.networkCode()))

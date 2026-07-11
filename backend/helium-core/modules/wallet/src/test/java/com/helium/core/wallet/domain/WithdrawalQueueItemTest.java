@@ -111,4 +111,26 @@ class WithdrawalQueueItemTest {
 
         assertThat(item.status()).isEqualTo(WithdrawalQueueStatus.CONFIRMED);
     }
+
+    @Test
+    void routesProviderDisagreementToChainReviewFromConfirming() {
+        WithdrawalQueueItem item = WithdrawalQueueItem.enqueue(UUID.randomUUID(), NOW);
+
+        item.transitionTo(WithdrawalQueueStatus.VALIDATING, "authorization complete", NOW.plusSeconds(1));
+        item.transitionTo(WithdrawalQueueStatus.APPROVED, "maker checker approved", NOW.plusSeconds(2));
+        item.transitionTo(WithdrawalQueueStatus.WAITING_SIGN, "builder queue", NOW.plusSeconds(3));
+        item.transitionTo(WithdrawalQueueStatus.BUILDING_TRANSACTION, "building", NOW.plusSeconds(4));
+        item.transitionTo(WithdrawalQueueStatus.TRANSACTION_BUILT, "draft stored", NOW.plusSeconds(5));
+        item.transitionTo(WithdrawalQueueStatus.WAITING_SIGNER, "custody signer", NOW.plusSeconds(6));
+        item.transitionTo(WithdrawalQueueStatus.SIGNING, "signing", NOW.plusSeconds(7));
+        item.transitionTo(WithdrawalQueueStatus.SIGNED, "signed", NOW.plusSeconds(8));
+        item.transitionTo(WithdrawalQueueStatus.WAITING_BROADCAST, "broadcast queue", NOW.plusSeconds(9));
+        item.transitionTo(WithdrawalQueueStatus.BROADCASTING, "broadcasting", NOW.plusSeconds(10));
+        item.transitionTo(WithdrawalQueueStatus.BROADCASTED, "broadcasted", NOW.plusSeconds(11));
+        item.transitionTo(WithdrawalQueueStatus.CONFIRMING, "confirming", NOW.plusSeconds(12));
+        item.transitionTo(WithdrawalQueueStatus.CHAIN_REVIEW_REQUIRED, "provider disagreement", NOW.plusSeconds(13));
+
+        assertThat(item.status()).isEqualTo(WithdrawalQueueStatus.CHAIN_REVIEW_REQUIRED);
+        assertThat(item.lastError()).isEqualTo("provider disagreement");
+    }
 }

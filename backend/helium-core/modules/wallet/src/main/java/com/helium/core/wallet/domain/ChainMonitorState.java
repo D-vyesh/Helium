@@ -24,6 +24,21 @@ public class ChainMonitorState {
     @Column(name = "reorg_checkpoint_block_height", nullable = false)
     private long reorgCheckpointBlockHeight;
 
+    @Column(name = "scan_checkpoint_block_height", nullable = false)
+    private long scanCheckpointBlockHeight;
+
+    @Column(name = "last_successful_provider", length = 160)
+    private String lastSuccessfulProvider;
+
+    @Column(name = "last_observed_block_hash", length = 160)
+    private String lastObservedBlockHash;
+
+    @Column(name = "last_observed_parent_hash", length = 160)
+    private String lastObservedParentHash;
+
+    @Column(name = "deep_reorg_review_required", nullable = false)
+    private boolean deepReorgReviewRequired;
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
@@ -48,6 +63,7 @@ public class ChainMonitorState {
         this.lastObservedBlockHeight = blockHeight;
         this.lastConfirmedBlockHeight = confirmedBlockHeight;
         this.reorgCheckpointBlockHeight = reorgCheckpointBlockHeight;
+        this.scanCheckpointBlockHeight = blockHeight;
         this.updatedAt = Objects.requireNonNull(now, "now");
     }
 
@@ -68,6 +84,31 @@ public class ChainMonitorState {
         this.lastObservedBlockHeight = blockHeight;
         this.lastConfirmedBlockHeight = confirmedBlockHeight;
         this.reorgCheckpointBlockHeight = reorgCheckpointBlockHeight;
+        this.scanCheckpointBlockHeight = blockHeight;
+        this.updatedAt = Objects.requireNonNull(now, "now");
+    }
+
+    public void recordSuccessfulScan(
+        long scanCheckpointBlockHeight,
+        String providerId,
+        String blockHash,
+        String parentHash,
+        Instant now
+    ) {
+        if (scanCheckpointBlockHeight < 0 || scanCheckpointBlockHeight > lastObservedBlockHeight) {
+            throw new WalletValidationException("scan checkpoint height is invalid");
+        }
+        this.scanCheckpointBlockHeight = scanCheckpointBlockHeight;
+        this.lastSuccessfulProvider = providerId == null || providerId.isBlank()
+            ? null
+            : BlockchainNetwork.requireText(providerId, "providerId", 160);
+        this.lastObservedBlockHash = blankToNull(blockHash);
+        this.lastObservedParentHash = blankToNull(parentHash);
+        this.updatedAt = Objects.requireNonNull(now, "now");
+    }
+
+    public void requireDeepReorgReview(Instant now) {
+        this.deepReorgReviewRequired = true;
         this.updatedAt = Objects.requireNonNull(now, "now");
     }
 
@@ -89,5 +130,33 @@ public class ChainMonitorState {
 
     public long reorgCheckpointBlockHeight() {
         return reorgCheckpointBlockHeight;
+    }
+
+    public long scanCheckpointBlockHeight() {
+        return scanCheckpointBlockHeight;
+    }
+
+    public String lastSuccessfulProvider() {
+        return lastSuccessfulProvider;
+    }
+
+    public String lastObservedBlockHash() {
+        return lastObservedBlockHash;
+    }
+
+    public String lastObservedParentHash() {
+        return lastObservedParentHash;
+    }
+
+    public boolean deepReorgReviewRequired() {
+        return deepReorgReviewRequired;
+    }
+
+    public Instant updatedAt() {
+        return updatedAt;
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : BlockchainNetwork.requireText(value, "blockHash", 160);
     }
 }

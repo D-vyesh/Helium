@@ -1,0 +1,74 @@
+#!/usr/bin/env sh
+set -eu
+
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.blockchain-certification.yml}"
+KEEP_RUNNING="${KEEP_RUNNING:-false}"
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+
+cd "$ROOT_DIR"
+
+status() {
+  printf '%s: %s\n' "$1" "$2"
+}
+
+cleanup() {
+  if [ "$KEEP_RUNNING" != "true" ]; then
+    docker compose -f "$COMPOSE_FILE" down --remove-orphans >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
+
+status "COMPOSE CONFIG" "RUNNING"
+docker compose -f "$COMPOSE_FILE" config >/dev/null
+status "COMPOSE CONFIG" "PASS"
+
+status "STACK START" "RUNNING"
+docker compose -f "$COMPOSE_FILE" up -d --build
+status "STACK START" "PASS"
+
+status "STACK PS" "RUNNING"
+docker compose -f "$COMPOSE_FILE" ps
+
+status "BTC RPC" "RUNNING"
+docker compose -f "$COMPOSE_FILE" exec -T bitcoin bitcoin-cli -regtest -rpcuser="${CERT_BTC_RPC_USER:-helium}" -rpcpassword="${CERT_BTC_RPC_PASSWORD:-helium}" getblockchaininfo >/dev/null
+docker compose -f "$COMPOSE_FILE" exec -T bitcoin bitcoin-cli -regtest -rpcuser="${CERT_BTC_RPC_USER:-helium}" -rpcpassword="${CERT_BTC_RPC_PASSWORD:-helium}" getblockcount >/dev/null
+status "BTC RPC" "PASS"
+
+status "ETH RPC" "RUNNING"
+docker compose -f "$COMPOSE_FILE" exec -T anvil cast chain-id --rpc-url http://127.0.0.1:8545 >/dev/null
+docker compose -f "$COMPOSE_FILE" exec -T anvil cast block-number --rpc-url http://127.0.0.1:8545 >/dev/null
+status "ETH RPC" "PASS"
+
+status "SOL RPC" "RUNNING"
+docker compose -f "$COMPOSE_FILE" exec -T solana solana -u http://127.0.0.1:8899 cluster-version >/dev/null
+docker compose -f "$COMPOSE_FILE" exec -T solana solana -u http://127.0.0.1:8899 slot >/dev/null
+status "SOL RPC" "PASS"
+
+status "BTC DEPOSIT" "RUNNING"
+status "BTC WITHDRAWAL" "RUNNING"
+status "ETH DEPOSIT" "RUNNING"
+status "ETH WITHDRAWAL" "RUNNING"
+status "SOL DEPOSIT" "RUNNING"
+status "SOL WITHDRAWAL" "RUNNING"
+status "RESTART RECOVERY" "RUNNING"
+status "PROVIDER DISAGREEMENT" "RUNNING"
+status "REORG HANDLING" "RUNNING"
+
+./backend/helium-core/gradlew -p backend/helium-core :app:test \
+  --tests '*BitcoinRegtestLifecycleIntegrationTest' \
+  --tests '*EthereumAnvilLifecycleIntegrationTest' \
+  --tests '*SolanaValidatorLifecycleIntegrationTest' \
+  --tests '*BlockchainRestartRecoveryIntegrationTest' \
+  --tests '*BlockchainProviderDisagreementIntegrationTest' \
+  --tests '*CanonicalChainReorgIntegrationTest'
+
+status "BTC DEPOSIT" "PASS"
+status "BTC WITHDRAWAL" "PASS"
+status "ETH DEPOSIT" "PASS"
+status "ETH WITHDRAWAL" "PASS"
+status "SOL DEPOSIT" "PASS"
+status "SOL WITHDRAWAL" "PASS"
+status "RESTART RECOVERY" "PASS"
+status "PROVIDER DISAGREEMENT" "PASS"
+status "REORG HANDLING" "PASS"
+status "BLOCKCHAIN CERTIFICATION" "PASSED"

@@ -94,6 +94,7 @@ public class WithdrawalQueueItem {
             || next == WithdrawalQueueStatus.BROADCAST_FAILED
             || next == WithdrawalQueueStatus.CONFIRMATION_FAILED
             || next == WithdrawalQueueStatus.REORG_DETECTED
+            || next == WithdrawalQueueStatus.CHAIN_REVIEW_REQUIRED
             ? BlockchainNetwork.requireText(reason, "failureReason", 500)
             : null;
         if (next != WithdrawalQueueStatus.BUILD_FAILED) {
@@ -213,9 +214,10 @@ public class WithdrawalQueueItem {
             case BROADCAST_FAILED -> EnumSet.of(WithdrawalQueueStatus.BROADCASTING, WithdrawalQueueStatus.FAILED, WithdrawalQueueStatus.CANCELLED);
             case BROADCASTED -> EnumSet.of(WithdrawalQueueStatus.CONFIRMING, WithdrawalQueueStatus.PENDING_CONFIRMATIONS, WithdrawalQueueStatus.FAILED);
             case PENDING_CONFIRMATIONS -> EnumSet.of(WithdrawalQueueStatus.CONFIRMING, WithdrawalQueueStatus.CONFIRMED, WithdrawalQueueStatus.FAILED);
-            case CONFIRMING -> EnumSet.of(WithdrawalQueueStatus.CONFIRMED, WithdrawalQueueStatus.CONFIRMATION_FAILED, WithdrawalQueueStatus.REORG_DETECTED, WithdrawalQueueStatus.FAILED);
+            case CONFIRMING -> EnumSet.of(WithdrawalQueueStatus.CONFIRMED, WithdrawalQueueStatus.CONFIRMATION_FAILED, WithdrawalQueueStatus.REORG_DETECTED, WithdrawalQueueStatus.CHAIN_REVIEW_REQUIRED, WithdrawalQueueStatus.FAILED);
             case CONFIRMATION_FAILED -> EnumSet.of(WithdrawalQueueStatus.CONFIRMING, WithdrawalQueueStatus.FAILED, WithdrawalQueueStatus.CANCELLED);
-            case REORG_DETECTED -> EnumSet.of(WithdrawalQueueStatus.CONFIRMING, WithdrawalQueueStatus.FAILED);
+            case REORG_DETECTED -> EnumSet.of(WithdrawalQueueStatus.CONFIRMING, WithdrawalQueueStatus.CHAIN_REVIEW_REQUIRED, WithdrawalQueueStatus.FAILED);
+            case CHAIN_REVIEW_REQUIRED -> EnumSet.of(WithdrawalQueueStatus.CONFIRMING, WithdrawalQueueStatus.FAILED);
             case CONFIRMED, FAILED, CANCELLED -> EnumSet.noneOf(WithdrawalQueueStatus.class);
         };
     }

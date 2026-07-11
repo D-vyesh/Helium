@@ -3,20 +3,22 @@ spring:
     activate:
       on-profile: local
   mail:
-    host: localhost
-    port: 1025
+    host: ${HELIUM_SMTP_HOST:localhost}
+    port: ${HELIUM_SMTP_PORT:1025}
+    username: ${HELIUM_SMTP_USERNAME:}
+    password: ${HELIUM_SMTP_PASSWORD:}
     properties:
       mail:
         smtp:
-          auth: false
+          auth: ${HELIUM_SMTP_AUTH:false}
           starttls:
-            enable: false
+            enable: ${HELIUM_SMTP_STARTTLS:false}
 
 helium:
   email:
-    enabled: true
-    from-address: noreply@helium.local
-    from-name: HELIUM Exchange (Local)
-    base-url: http://localhost:3000
+    enabled: ${HELIUM_EMAIL_ENABLED:true}
+    from-address: ${HELIUM_EMAIL_FROM:noreply@helium.local}
+    from-name: ${HELIUM_EMAIL_FROM_NAME:HELIUM Exchange (Local)}
+    base-url: ${HELIUM_EMAIL_BASE_URL:http://localhost:3000}
   auth:
-    totp-encryption-key: local-totp-encryption-key-32bytes!!
+    totp-encryption-key: ${HELIUM_TOTP_ENCRYPTION_KEY:local-totp-encryption-key-32bytes!!}

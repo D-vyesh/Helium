@@ -147,9 +147,11 @@ public class DepositService implements DepositPort {
         if (command.confirmations() < 0) {
             log.warn("Reorg detected for deposit {}. TxHash dropped from chain.", deposit.id());
             if (deposit.status() == DepositStatus.POSTED_TO_LEDGER) {
-                log.error("CRITICAL: Reorg dropped a CONFIRMED deposit! Issuing ledger reversal for {}", deposit.id());
-                reverseDeposit(deposit, actorId);
-                accountFreezeWorkflow.freezeAccountForNegativeBalance(deposit.userId(), "Deep Reorg Reversal: " + deposit.txHash());
+                log.error("CRITICAL: Reorg dropped a posted deposit {}. Manual finance review required.", deposit.id());
+                deposit.requireChainReview(clock.instant(), "DEEP_REORG_REVIEW_REQUIRED");
+                accountFreezeWorkflow.freezeAccountForNegativeBalance(deposit.userId(), "Deep reorg review required: " + deposit.txHash());
+                auditService.record(WalletAuditEventType.DEPOSIT_CHAIN_REVIEW_REQUIRED, deposit.id(), actorId, deposit.txHash());
+                return toView(deposit);
             }
             deposit.markReorged(clock.instant(), "REORG_DETECTED");
             auditService.record(WalletAuditEventType.DEPOSIT_REORGED, deposit.id(), actorId, deposit.txHash());
@@ -188,24 +190,6 @@ public class DepositService implements DepositPort {
         ));
         deposit.markPosted(result.transactionId(), clock.instant());
         auditService.record(WalletAuditEventType.DEPOSIT_POSTED, deposit.id(), actorId, result.transactionId().toString());
-    }
-
-    private void reverseDeposit(Deposit deposit, String actorId) {
-        LedgerAccountView external = ledgerAccounts.external(deposit.networkCode(), deposit.assetCode());
-        LedgerAccountView userAvailable = ledgerAccounts.userAvailable(deposit.userId().toString(), deposit.assetCode());
-        String businessReference = "wallet:deposit:reversal:" + deposit.id();
-        LedgerPostingResult result = ledgerPostingPort.post(new LedgerPostingCommand(
-            LedgerTransactionType.ADJUSTMENT, // or REVERSAL if exists
-            businessReference,
-            businessReference,
-            "reversal of orphaned wallet deposit",
-            AuditMetadata.of(actorId, "wallet", businessReference, deposit.txHash(), "deposit reorg reversal"),
-            List.of(
-                new PostingLineCommand(external.accountId(), PostingDirection.CREDIT, deposit.amount()),
-                new PostingLineCommand(userAvailable.accountId(), PostingDirection.DEBIT, deposit.amount())
-            )
-        ));
-        log.info("Ledger reversed for deposit {} with tx {}", deposit.id(), result.transactionId());
     }
 
     static DepositView toView(Deposit deposit) {

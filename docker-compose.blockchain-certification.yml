@@ -1,0 +1,163 @@
+name: helium-blockchain-certification
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${CERT_POSTGRES_DB:-helium}
+      POSTGRES_USER: ${CERT_POSTGRES_USER:-helium}
+      POSTGRES_PASSWORD: ${CERT_POSTGRES_PASSWORD:-helium-cert}
+    ports:
+      - "${CERT_POSTGRES_PORT:-55432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CERT_POSTGRES_USER:-helium} -d ${CERT_POSTGRES_DB:-helium}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${CERT_REDIS_PASSWORD:-helium-cert-redis}"]
+    ports:
+      - "${CERT_REDIS_PORT:-56379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${CERT_REDIS_PASSWORD:-helium-cert-redis}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  bitcoin:
+    image: ruimarinho/bitcoin-core:25
+    command:
+      - "-regtest=1"
+      - "-server=1"
+      - "-txindex=1"
+      - "-fallbackfee=0.0001"
+      - "-rpcbind=0.0.0.0"
+      - "-rpcallowip=0.0.0.0/0"
+      - "-rpcuser=${CERT_BTC_RPC_USER:-helium}"
+      - "-rpcpassword=${CERT_BTC_RPC_PASSWORD:-helium}"
+      - "-zmqpubrawblock=tcp://0.0.0.0:28332"
+      - "-zmqpubrawtx=tcp://0.0.0.0:28333"
+    ports:
+      - "${CERT_BTC_RPC_PORT:-18443}:18443"
+    healthcheck:
+      test: ["CMD-SHELL", "bitcoin-cli -regtest -rpcuser=${CERT_BTC_RPC_USER:-helium} -rpcpassword=${CERT_BTC_RPC_PASSWORD:-helium} getblockchaininfo >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  anvil:
+    image: ghcr.io/foundry-rs/foundry:latest
+    entrypoint: ["anvil"]
+    command: ["--host", "0.0.0.0", "--chain-id", "31337", "--block-time", "1"]
+    ports:
+      - "${CERT_ETH_RPC_PORT:-18545}:8545"
+    healthcheck:
+      test: ["CMD-SHELL", "cast block-number --rpc-url http://127.0.0.1:8545 >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  solana:
+    image: solanalabs/solana:v1.18.26
+    command: ["solana-test-validator", "--ledger", "/tmp/helium-ledger", "--reset", "--rpc-bind-address", "0.0.0.0", "--rpc-port", "8899"]
+    ports:
+      - "${CERT_SOL_RPC_PORT:-18899}:8899"
+    healthcheck:
+      test: ["CMD-SHELL", "solana -u http://127.0.0.1:8899 slot >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/helium-core/Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: ${CERT_SPRING_PROFILES_ACTIVE:-local,certification}
+      HELIUM_ENVIRONMENT: certification
+      HELIUM_DB_URL: jdbc:postgresql://postgres:5432/${CERT_POSTGRES_DB:-helium}
+      HELIUM_DB_USERNAME: ${CERT_POSTGRES_USER:-helium}
+      HELIUM_DB_PASSWORD: ${CERT_POSTGRES_PASSWORD:-helium-cert}
+      HELIUM_DB_POOL_SIZE: ${HELIUM_DB_POOL_SIZE:-20}
+      HELIUM_DB_MAX_LIFETIME_MS: ${HELIUM_DB_MAX_LIFETIME_MS:-1800000}
+      HELIUM_REDIS_HOST: redis
+      HELIUM_REDIS_PORT: 6379
+      HELIUM_REDIS_PASSWORD: ${CERT_REDIS_PASSWORD:-helium-cert-redis}
+      HELIUM_REDIS_TIMEOUT: ${HELIUM_REDIS_TIMEOUT:-2s}
+      HELIUM_JWT_SECRET: ${HELIUM_JWT_SECRET:-local-development-jwt-secret-change-me-minimum-32-bytes}
+      HELIUM_TOTP_ENCRYPTION_KEY: ${HELIUM_TOTP_ENCRYPTION_KEY:-local-totp-encryption-key-32bytes!!}
+      HELIUM_SECRETS_BACKEND: ${HELIUM_SECRETS_BACKEND:-environment}
+      HELIUM_SECRETS_REFRESH_MS: ${HELIUM_SECRETS_REFRESH_MS:-300000}
+      HELIUM_API_KEY_PEPPER: ${HELIUM_API_KEY_PEPPER:-helium-cert-api-key-pepper}
+      HELIUM_API_KEY_PREVIOUS_PEPPER: ${HELIUM_API_KEY_PREVIOUS_PEPPER:-}
+      HELIUM_API_KEY_VERSION: ${HELIUM_API_KEY_VERSION:-v1}
+      HELIUM_API_KEY_PREVIOUS_VERSION: ${HELIUM_API_KEY_PREVIOUS_VERSION:-}
+      HELIUM_API_KEY_SIGNATURE_TTL: ${HELIUM_API_KEY_SIGNATURE_TTL:-5m}
+      HELIUM_API_KEY_NONCE_TTL: ${HELIUM_API_KEY_NONCE_TTL:-10m}
+      HELIUM_API_KEY_DEFAULT_LIFETIME: ${HELIUM_API_KEY_DEFAULT_LIFETIME:-90d}
+      HELIUM_EMAIL_ENABLED: ${HELIUM_EMAIL_ENABLED:-true}
+      HELIUM_EMAIL_FROM: ${HELIUM_EMAIL_FROM:-no-reply@helium.local}
+      HELIUM_EMAIL_FROM_NAME: ${HELIUM_EMAIL_FROM_NAME:-HELIUM Exchange}
+      HELIUM_EMAIL_BASE_URL: ${HELIUM_EMAIL_BASE_URL:-http://localhost:3000}
+      HELIUM_SMTP_HOST: ${HELIUM_SMTP_HOST:-mailhog}
+      HELIUM_SMTP_PORT: ${HELIUM_SMTP_PORT:-1025}
+      HELIUM_SMTP_USERNAME: ${HELIUM_SMTP_USERNAME:-}
+      HELIUM_SMTP_PASSWORD: ${HELIUM_SMTP_PASSWORD:-}
+      HELIUM_SMTP_AUTH: ${HELIUM_SMTP_AUTH:-false}
+      HELIUM_SMTP_STARTTLS: ${HELIUM_SMTP_STARTTLS:-false}
+      HELIUM_OUTBOX_ENABLED: ${HELIUM_OUTBOX_ENABLED:-true}
+      HELIUM_OUTBOX_POLL_INTERVAL_MS: ${HELIUM_OUTBOX_POLL_INTERVAL_MS:-1000}
+      HELIUM_TRACE_SAMPLING_PROBABILITY: ${HELIUM_TRACE_SAMPLING_PROBABILITY:-0.10}
+      HELIUM_BTC_RPC_NODES: http://${CERT_BTC_RPC_USER:-helium}:${CERT_BTC_RPC_PASSWORD:-helium}@bitcoin:18443
+      HELIUM_ETH_RPC_NODES: http://anvil:8545
+      HELIUM_SOL_RPC_NODES: http://solana:8899
+      HELIUM_WALLET_RPC_BTC_NODES: http://${CERT_BTC_RPC_USER:-helium}:${CERT_BTC_RPC_PASSWORD:-helium}@bitcoin:18443
+      HELIUM_WALLET_RPC_ETH_NODES: http://anvil:8545
+      HELIUM_WALLET_RPC_SOL_NODES: http://solana:8899
+      HELIUM_WALLET_RPC_FAILURE_THRESHOLD: ${HELIUM_WALLET_RPC_FAILURE_THRESHOLD:-3}
+      HELIUM_WALLET_RPC_RECOVERY_TIMEOUT_MS: ${HELIUM_WALLET_RPC_RECOVERY_TIMEOUT_MS:-30000}
+      HELIUM_WALLET_RPC_STALE_BLOCK_LAG: ${HELIUM_WALLET_RPC_STALE_BLOCK_LAG:-6}
+      HELIUM_WALLET_RPC_HEALTH_MONITOR_ENABLED: ${HELIUM_WALLET_RPC_HEALTH_MONITOR_ENABLED:-true}
+      HELIUM_WALLET_RPC_HEALTH_MONITOR_POLL_INTERVAL_MS: ${HELIUM_WALLET_RPC_HEALTH_MONITOR_POLL_INTERVAL_MS:-30000}
+      HELIUM_WALLET_RPC_CONSISTENCY_MONITOR_ENABLED: ${HELIUM_WALLET_RPC_CONSISTENCY_MONITOR_ENABLED:-true}
+      HELIUM_WALLET_RPC_CONSISTENCY_MONITOR_POLL_INTERVAL_MS: ${HELIUM_WALLET_RPC_CONSISTENCY_MONITOR_POLL_INTERVAL_MS:-30000}
+      HELIUM_WALLET_RPC_CONSISTENCY_ALLOWED_BLOCK_LAG: ${HELIUM_WALLET_RPC_CONSISTENCY_ALLOWED_BLOCK_LAG:-3}
+      HELIUM_WALLET_BLOCKCHAIN_CONSENSUS_MINIMUM_HEALTHY_PROVIDERS: ${CERT_MINIMUM_HEALTHY_PROVIDERS:-1}
+      HELIUM_WALLET_BLOCKCHAIN_CONSENSUS_MINIMUM_AGREEMENT: ${CERT_MINIMUM_AGREEMENT:-1}
+      HELIUM_WALLET_CHAIN_MONITOR_ENABLED: "true"
+      HELIUM_WALLET_BUILDER_WORKER_ENABLED: "true"
+      HELIUM_WALLET_BUILDER_POLL_INTERVAL_MS: ${HELIUM_WALLET_BUILDER_POLL_INTERVAL_MS:-5000}
+      HELIUM_CUSTODY_SIGNING_WORKER_ENABLED: "true"
+      HELIUM_CUSTODY_SIGNING_POLL_INTERVAL_MS: ${HELIUM_CUSTODY_SIGNING_POLL_INTERVAL_MS:-5000}
+      HELIUM_CUSTODY_SIGNING_MAX_RETRIES: ${HELIUM_CUSTODY_SIGNING_MAX_RETRIES:-5}
+      HELIUM_WALLET_BROADCAST_WORKER_ENABLED: "true"
+      HELIUM_WALLET_BROADCAST_POLL_INTERVAL_MS: ${HELIUM_WALLET_BROADCAST_POLL_INTERVAL_MS:-5000}
+      HELIUM_WALLET_BROADCAST_MAX_RETRIES: ${HELIUM_WALLET_BROADCAST_MAX_RETRIES:-5}
+      HELIUM_WALLET_CONFIRMATION_WORKER_ENABLED: "true"
+      HELIUM_WALLET_CONFIRMATION_POLL_INTERVAL_MS: ${HELIUM_WALLET_CONFIRMATION_POLL_INTERVAL_MS:-15000}
+      HELIUM_WALLET_STUCK_MONITOR_ENABLED: ${HELIUM_WALLET_STUCK_MONITOR_ENABLED:-false}
+      HELIUM_WALLET_STUCK_MONITOR_POLL_INTERVAL_MS: ${HELIUM_WALLET_STUCK_MONITOR_POLL_INTERVAL_MS:-600000}
+      HELIUM_WALLET_STUCK_MONITOR_THRESHOLD_MINUTES: ${HELIUM_WALLET_STUCK_MONITOR_THRESHOLD_MINUTES:-60}
+      HELIUM_SOLANA_BROADCAST_SKIP_PREFLIGHT: ${HELIUM_SOLANA_BROADCAST_SKIP_PREFLIGHT:-false}
+      HELIUM_SOLANA_BROADCAST_COMMITMENT: ${HELIUM_SOLANA_BROADCAST_COMMITMENT:-processed}
+      HELIUM_LOG_LEVEL: ${HELIUM_LOG_LEVEL:-INFO}
+    ports:
+      - "${CERT_HELIUM_HTTP_PORT:-18080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      bitcoin:
+        condition: service_healthy
+      anvil:
+        condition: service_healthy
+      solana:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 30

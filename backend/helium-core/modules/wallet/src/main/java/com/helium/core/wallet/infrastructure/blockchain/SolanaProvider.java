@@ -76,6 +76,11 @@ public class SolanaProvider implements BlockchainProvider {
         return rpcClient.getSlot();
     }
 
+    @Override
+    public CanonicalBlockReference getCanonicalBlock(long height) {
+        return rpcClient.getCanonicalBlock(height);
+    }
+
     private Map<String, String> activeSolanaAddresses() {
         return addressRepository.findAll().stream()
             .filter(address -> "SOL".equals(address.networkCode()))

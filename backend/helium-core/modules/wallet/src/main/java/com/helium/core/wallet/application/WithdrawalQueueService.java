@@ -161,6 +161,11 @@ public class WithdrawalQueueService {
     }
 
     @Transactional
+    public void markChainReviewRequired(Withdrawal withdrawal, String actorId, String reason) {
+        transition(withdrawal, WithdrawalQueueStatus.CHAIN_REVIEW_REQUIRED, actorId, reason);
+    }
+
+    @Transactional
     public void fail(Withdrawal withdrawal, String actorId, String reason) {
         transition(withdrawal, WithdrawalQueueStatus.FAILED, actorId, reason);
     }

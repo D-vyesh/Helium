@@ -2,6 +2,7 @@ package com.helium.core.wallet.infrastructure.blockchain;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.helium.core.wallet.application.BlockchainTransactionObservation;
 import com.helium.core.wallet.infrastructure.rpc.CircuitBreakerClient;
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -11,6 +12,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
@@ -46,7 +48,7 @@ public class SolanaRpcClient {
     }
 
     public long getSlot() {
-        return circuitBreaker.executeWithHedging("SOL", nodeUrl -> rpc(nodeUrl, "getSlot", List.of()).asLong(), 1_000);
+        return circuitBreaker.executeLatestBlockWithHedging("SOL", nodeUrl -> rpc(nodeUrl, "getSlot", List.of()).asLong(), 1_000);
     }
 
     public String sendTransaction(byte[] signedTx) {
@@ -54,7 +56,7 @@ public class SolanaRpcClient {
     }
 
     public String sendTransaction(byte[] signedTx, boolean skipPreflight, String commitment) {
-        return circuitBreaker.executeWithHedging("SOL", nodeUrl -> {
+        return circuitBreaker.executeWithFailover("SOL", nodeUrl -> {
             log.debug("Executing sendTransaction on node {}", nodeUrl);
             String encoded = Base64.getEncoder().encodeToString(signedTx);
             return rpc(nodeUrl, "sendTransaction", List.of(encoded, Map.of(
@@ -63,7 +65,7 @@ public class SolanaRpcClient {
                 "preflightCommitment", requireCommitment(commitment),
                 "maxRetries", 3
             ))).asText();
-        }, 1_000);
+        });
     }
 
     public long getConfirmations(String signature) {
@@ -86,11 +88,42 @@ public class SolanaRpcClient {
         }, 1_000);
     }
 
+    public BlockchainTransactionObservation observeTransaction(String nodeUrl, String providerId, String signature, Instant observedAt) throws Exception {
+        JsonNode status = rpc(nodeUrl, "getSignatureStatuses", List.of(
+            List.of(signature),
+            Map.of("searchTransactionHistory", true)
+        )).path("value").path(0);
+        if (status.isMissingNode() || status.isNull()) {
+            return new BlockchainTransactionObservation("SOL", signature, providerId, false, false, null, null, null, "NOT_FOUND", observedAt);
+        }
+        boolean failed = !status.path("err").isNull();
+        Long confirmations = null;
+        if (status.path("confirmations").isNumber()) {
+            confirmations = status.path("confirmations").asLong();
+        } else if ("finalized".equals(status.path("confirmationStatus").asText())) {
+            confirmations = 32L;
+        } else {
+            confirmations = 0L;
+        }
+        return new BlockchainTransactionObservation(
+            "SOL",
+            signature,
+            providerId,
+            true,
+            !failed && status.path("slot").isNumber(),
+            status.path("slot").isNumber() ? status.path("slot").asLong() : null,
+            solanaRecentBlockhash(nodeUrl, signature),
+            confirmations,
+            failed ? "FAILED" : status.path("confirmationStatus").asText("processed").toUpperCase(),
+            observedAt
+        );
+    }
+
     public List<DetectedDeposit> scanSlotRange(long startSlot, long endSlot, Map<String, String> watchedAddresses) {
         if (endSlot < startSlot || watchedAddresses.isEmpty()) {
             return List.of();
         }
-        return circuitBreaker.executeWithHedging("SOL", nodeUrl -> {
+        return circuitBreaker.executeWithFailover("SOL", nodeUrl -> {
             List<DetectedDeposit> deposits = new ArrayList<>();
             for (String address : watchedAddresses.values()) {
                 JsonNode signatures = rpc(nodeUrl, "getSignaturesForAddress", List.<Object>of(address, Map.of("limit", 1_000)));
@@ -112,7 +145,27 @@ public class SolanaRpcClient {
                 }
             }
             return deposits;
-        }, 2_000);
+        });
+    }
+
+    public CanonicalBlockReference getCanonicalBlock(long slot) {
+        return circuitBreaker.executeWithFailover("SOL", nodeUrl -> {
+            JsonNode block = rpc(nodeUrl, "getBlock", List.<Object>of(slot, Map.of(
+                "encoding", "json",
+                "transactionDetails", "none",
+                "rewards", false,
+                "maxSupportedTransactionVersion", 0
+            )));
+            if (block.isMissingNode() || block.isNull()) {
+                throw new IllegalStateException("Solana block was not found at slot " + slot);
+            }
+            return new CanonicalBlockReference(
+                "SOL",
+                slot,
+                block.path("blockhash").asText(),
+                block.path("previousBlockhash").isTextual() ? block.path("previousBlockhash").asText() : null
+            );
+        });
     }
 
     public BigDecimal estimatePriorityFeeLamports() {
@@ -181,6 +234,15 @@ public class SolanaRpcClient {
             deposits.add(new DetectedDeposit("SOL", signature, i, amount, "SOL", address));
             return;
         }
+    }
+
+    private String solanaRecentBlockhash(String nodeUrl, String signature) throws Exception {
+        JsonNode transaction = rpc(nodeUrl, "getTransaction", List.<Object>of(signature, Map.of(
+            "encoding", "json",
+            "maxSupportedTransactionVersion", 0
+        )));
+        JsonNode blockhash = transaction.path("transaction").path("message").path("recentBlockhash");
+        return blockhash.isTextual() ? blockhash.asText() : null;
     }
 
     private JsonNode rpc(String nodeUrl, String method, List<Object> params) throws Exception {

@@ -2,6 +2,7 @@ package com.helium.core.wallet.infrastructure.blockchain;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.helium.core.wallet.application.BlockchainTransactionObservation;
 import com.helium.core.wallet.infrastructure.rpc.CircuitBreakerClient;
 import java.math.BigDecimal;
 import java.net.URI;
@@ -9,6 +10,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -47,18 +49,18 @@ public class BitcoinRpcClient {
     }
 
     public long getBlockCount() {
-        return circuitBreaker.executeWithHedging("BTC", nodeUrl -> rpc(nodeUrl, "getblockcount", List.of()).asLong(), 1_000);
+        return circuitBreaker.executeLatestBlockWithHedging("BTC", nodeUrl -> rpc(nodeUrl, "getblockcount", List.of()).asLong(), 1_000);
     }
 
     public String sendRawTransaction(byte[] signedTx) {
-        return circuitBreaker.executeWithHedging("BTC", nodeUrl -> {
+        return circuitBreaker.executeWithFailover("BTC", nodeUrl -> {
             log.debug("Executing sendrawtransaction on node {}", nodeUrl);
             return rpc(nodeUrl, "sendrawtransaction", List.of(rawTransactionHex(signedTx))).asText();
-        }, 1_000);
+        });
     }
 
     public FinalizedPsbt finalizePsbt(String signedPsbt) {
-        return circuitBreaker.executeWithHedging("BTC", nodeUrl -> {
+        return circuitBreaker.executeWithFailover("BTC", nodeUrl -> {
             JsonNode result = rpc(nodeUrl, "finalizepsbt", List.<Object>of(
                 BlockchainRpcText.require(signedPsbt, "signedPsbt"),
                 true
@@ -72,7 +74,7 @@ public class BitcoinRpcClient {
                 throw new IllegalStateException("Bitcoin Core did not return finalized transaction hex");
             }
             return new FinalizedPsbt(hex);
-        }, 2_000);
+        });
     }
 
     public long getConfirmations(String txHash) {
@@ -92,11 +94,36 @@ public class BitcoinRpcClient {
         }
     }
 
+    public BlockchainTransactionObservation observeTransaction(String nodeUrl, String providerId, String txHash, Instant observedAt) throws Exception {
+        try {
+            JsonNode result = rpc(nodeUrl, "getrawtransaction", List.<Object>of(txHash, true));
+            boolean hasBlock = result.path("blockhash").isTextual();
+            Long confirmations = result.path("confirmations").isNumber() ? result.path("confirmations").asLong() : 0L;
+            return new BlockchainTransactionObservation(
+                "BTC",
+                txHash,
+                providerId,
+                true,
+                hasBlock && confirmations >= 0,
+                null,
+                hasBlock ? result.path("blockhash").asText() : null,
+                confirmations,
+                result.path("confirmations").isNumber() && confirmations > 0 ? "CONFIRMED" : "MEMPOOL",
+                observedAt
+            );
+        } catch (BitcoinRpcException exception) {
+            if (exception.code() == -5) {
+                return new BlockchainTransactionObservation("BTC", txHash, providerId, false, false, null, null, null, "NOT_FOUND", observedAt);
+            }
+            throw exception;
+        }
+    }
+
     public List<DetectedDeposit> scanBlockRange(long startBlock, long endBlock, Map<String, String> watchedAddresses) {
         if (endBlock < startBlock || watchedAddresses.isEmpty()) {
             return List.of();
         }
-        return circuitBreaker.executeWithHedging("BTC", nodeUrl -> {
+        return circuitBreaker.executeWithFailover("BTC", nodeUrl -> {
             List<DetectedDeposit> deposits = new ArrayList<>();
             for (long height = startBlock; height <= endBlock; height++) {
                 String blockHash = rpc(nodeUrl, "getblockhash", List.<Object>of(height)).asText();
@@ -125,7 +152,20 @@ public class BitcoinRpcClient {
                 }
             }
             return deposits;
-        }, 2_000);
+        });
+    }
+
+    public CanonicalBlockReference getCanonicalBlock(long height) {
+        return circuitBreaker.executeWithFailover("BTC", nodeUrl -> {
+            String blockHash = rpc(nodeUrl, "getblockhash", List.<Object>of(height)).asText();
+            JsonNode block = rpc(nodeUrl, "getblock", List.<Object>of(blockHash, 1));
+            return new CanonicalBlockReference(
+                "BTC",
+                height,
+                blockHash,
+                block.path("previousblockhash").isTextual() ? block.path("previousblockhash").asText() : null
+            );
+        });
     }
 
     public BigDecimal estimateFeeBtcPerKilobyte(int targetBlocks) {
@@ -152,7 +192,7 @@ public class BitcoinRpcClient {
         if (feeRateBtcPerKilobyte == null || feeRateBtcPerKilobyte.signum() <= 0) {
             throw new IllegalArgumentException("BTC fee rate must be positive");
         }
-        return circuitBreaker.executeWithHedging("BTC", nodeUrl -> {
+        return circuitBreaker.executeWithFailover("BTC", nodeUrl -> {
             Map<String, Object> options = Map.of(
                 "add_inputs", true,
                 "includeWatching", true,
@@ -177,7 +217,7 @@ public class BitcoinRpcClient {
                 result.path("changepos").asInt(-1),
                 lockTime
             );
-        }, 2_000);
+        });
     }
 
     private JsonNode rpc(String nodeUrl, String method, List<Object> params) throws Exception {

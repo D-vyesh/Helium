@@ -50,4 +50,6 @@ public interface BlockchainProvider {
      * Fetch the current highest block number synced by the node.
      */
     long getLatestBlockHeight();
+
+    CanonicalBlockReference getCanonicalBlock(long height);
 }

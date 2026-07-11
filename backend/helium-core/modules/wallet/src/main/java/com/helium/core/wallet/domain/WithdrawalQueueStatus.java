@@ -20,6 +20,7 @@ public enum WithdrawalQueueStatus {
     CONFIRMING,
     CONFIRMATION_FAILED,
     REORG_DETECTED,
+    CHAIN_REVIEW_REQUIRED,
     CONFIRMED,
     FAILED,
     CANCELLED

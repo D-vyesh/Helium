@@ -87,6 +87,8 @@ helium:
     enabled: ${HELIUM_OUTBOX_ENABLED:true}
     poll-interval-ms: ${HELIUM_OUTBOX_POLL_INTERVAL_MS:1000}
   wallet:
+    chain-monitor:
+      enabled: ${HELIUM_WALLET_CHAIN_MONITOR_ENABLED:false}
     custody:
       eth:
         from-address: ${HELIUM_ETH_CUSTODY_ADDRESS:}
@@ -107,12 +109,40 @@ helium:
         enabled: ${HELIUM_WALLET_BUILDER_WORKER_ENABLED:false}
         poll-interval-ms: ${HELIUM_WALLET_BUILDER_POLL_INTERVAL_MS:5000}
     rpc:
+      failure-threshold: ${HELIUM_WALLET_RPC_FAILURE_THRESHOLD:3}
+      recovery-timeout-ms: ${HELIUM_WALLET_RPC_RECOVERY_TIMEOUT_MS:30000}
+      stale-block-lag: ${HELIUM_WALLET_RPC_STALE_BLOCK_LAG:6}
       btc:
         nodes: ${HELIUM_BTC_RPC_NODES:}
       eth:
         nodes: ${HELIUM_ETH_RPC_NODES:}
       sol:
         nodes: ${HELIUM_SOL_RPC_NODES:}
+      health-monitor:
+        enabled: ${HELIUM_WALLET_RPC_HEALTH_MONITOR_ENABLED:true}
+        poll-interval-ms: ${HELIUM_WALLET_RPC_HEALTH_MONITOR_POLL_INTERVAL_MS:30000}
+      consistency:
+        allowed-block-lag: ${HELIUM_WALLET_RPC_CONSISTENCY_ALLOWED_BLOCK_LAG:3}
+      consistency-monitor:
+        enabled: ${HELIUM_WALLET_RPC_CONSISTENCY_MONITOR_ENABLED:true}
+        poll-interval-ms: ${HELIUM_WALLET_RPC_CONSISTENCY_MONITOR_POLL_INTERVAL_MS:30000}
+    broadcast:
+      max-retries: ${HELIUM_WALLET_BROADCAST_MAX_RETRIES:5}
+      worker:
+        enabled: ${HELIUM_WALLET_BROADCAST_WORKER_ENABLED:false}
+        poll-interval-ms: ${HELIUM_WALLET_BROADCAST_POLL_INTERVAL_MS:5000}
+    confirmation:
+      worker:
+        enabled: ${HELIUM_WALLET_CONFIRMATION_WORKER_ENABLED:false}
+        poll-interval-ms: ${HELIUM_WALLET_CONFIRMATION_POLL_INTERVAL_MS:15000}
+    stuck-monitor:
+      enabled: ${HELIUM_WALLET_STUCK_MONITOR_ENABLED:false}
+      poll-interval-ms: ${HELIUM_WALLET_STUCK_MONITOR_POLL_INTERVAL_MS:600000}
+      threshold-minutes: ${HELIUM_WALLET_STUCK_MONITOR_THRESHOLD_MINUTES:60}
+    solana:
+      broadcast:
+        skip-preflight: ${HELIUM_SOLANA_BROADCAST_SKIP_PREFLIGHT:false}
+        commitment: ${HELIUM_SOLANA_BROADCAST_COMMITMENT:processed}
   market-data:
     live:
       enabled: ${HELIUM_MARKET_DATA_LIVE_ENABLED:true}

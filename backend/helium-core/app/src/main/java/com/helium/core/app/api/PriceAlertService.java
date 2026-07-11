@@ -6,6 +6,7 @@ import java.math.MathContext;
 import java.math.RoundingMode;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -81,9 +82,9 @@ public class PriceAlertService {
             request.deliveryInApp(),
             request.deliveryEmail(),
             request.deliveryPush(),
-            request.expiresAt(),
-            now,
-            now
+            timestamp(request.expiresAt()),
+            timestamp(now),
+            timestamp(now)
         );
         return get(userId, id);
     }
@@ -93,7 +94,7 @@ public class PriceAlertService {
         jdbcTemplate.update(
             "update price_alerts set enabled = ?, updated_at = ? where id = ? and user_id = ?",
             enabled,
-            clock.instant(),
+            timestamp(clock.instant()),
             id,
             userId
         );
@@ -118,7 +119,7 @@ public class PriceAlertService {
             order by created_at asc
             """,
             (rs, rowNum) -> alert(rs),
-            clock.instant()
+            timestamp(clock.instant())
         );
         alerts.forEach(this::evaluate);
     }
@@ -138,9 +139,9 @@ public class PriceAlertService {
                 """,
                 current,
                 triggered,
-                clock.instant(),
+                timestamp(clock.instant()),
                 triggered,
-                clock.instant(),
+                timestamp(clock.instant()),
                 alert.id()
             );
             if (triggered && alert.deliveryInApp()) {
@@ -223,6 +224,10 @@ public class PriceAlertService {
 
     private String normalizeMarket(String marketSymbol) {
         return marketSymbol == null ? "" : marketSymbol.trim().toUpperCase(Locale.ROOT).replace("-", "");
+    }
+
+    private static Timestamp timestamp(Instant instant) {
+        return instant == null ? null : Timestamp.from(instant);
     }
 
     public record PriceAlertRequest(

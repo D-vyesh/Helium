@@ -17,8 +17,6 @@ import com.helium.core.wallet.infrastructure.WithdrawalConfirmationRepository;
 import com.helium.core.wallet.infrastructure.WithdrawalQueueRepository;
 import com.helium.core.wallet.infrastructure.WithdrawalReorgEventRepository;
 import com.helium.core.wallet.infrastructure.WithdrawalRepository;
-import com.helium.core.wallet.infrastructure.blockchain.BlockchainProvider;
-import com.helium.core.wallet.infrastructure.blockchain.BlockchainProviderRegistry;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -37,7 +35,7 @@ public class ConfirmationMonitorService {
     private final WithdrawalConfirmationRepository confirmationRepository;
     private final WithdrawalReorgEventRepository reorgEventRepository;
     private final BlockchainNetworkRepository networkRepository;
-    private final BlockchainProviderRegistry providerRegistry;
+    private final BlockchainObservationConsensusService consensusService;
     private final WithdrawalApprovalService approvalService;
     private final WithdrawalQueueService queueService;
     private final WalletAuditService auditService;
@@ -53,7 +51,7 @@ public class ConfirmationMonitorService {
         WithdrawalConfirmationRepository confirmationRepository,
         WithdrawalReorgEventRepository reorgEventRepository,
         BlockchainNetworkRepository networkRepository,
-        BlockchainProviderRegistry providerRegistry,
+        BlockchainObservationConsensusService consensusService,
         WithdrawalApprovalService approvalService,
         WithdrawalQueueService queueService,
         WalletAuditService auditService,
@@ -66,7 +64,7 @@ public class ConfirmationMonitorService {
         this.confirmationRepository = confirmationRepository;
         this.reorgEventRepository = reorgEventRepository;
         this.networkRepository = networkRepository;
-        this.providerRegistry = providerRegistry;
+        this.consensusService = consensusService;
         this.approvalService = approvalService;
         this.queueService = queueService;
         this.auditService = auditService;
@@ -95,11 +93,10 @@ public class ConfirmationMonitorService {
             .orElseThrow(() -> new WalletValidationException("broadcasted transaction was not found"));
         BlockchainNetwork network = networkRepository.findById(withdrawal.networkCode())
             .orElseThrow(() -> new WalletValidationException("network is not registered"));
-        BlockchainProvider provider = providerRegistry.getRequiredProvider(withdrawal.networkCode());
-
         try {
-            long observed = confirmationLatency.record(() -> provider.getConfirmations(broadcast.txHash()));
-            upsertConfirmation(withdrawal, broadcast, network, observed);
+            BlockchainObservationConsensus consensus = confirmationLatency.record(() ->
+                consensusService.establish(withdrawal.networkCode(), broadcast.txHash(), "WITHDRAWAL_CONFIRMING"));
+            upsertConfirmation(withdrawal, broadcast, network, consensus);
         } catch (RuntimeException exception) {
             confirmationFailures.increment();
             String reason = conciseReason(exception);
@@ -110,16 +107,35 @@ public class ConfirmationMonitorService {
         }
     }
 
-    private void upsertConfirmation(Withdrawal withdrawal, BlockchainBroadcast broadcast, BlockchainNetwork network, long observed) {
+    private void upsertConfirmation(
+        Withdrawal withdrawal,
+        BlockchainBroadcast broadcast,
+        BlockchainNetwork network,
+        BlockchainObservationConsensus consensus
+    ) {
         WithdrawalConfirmation confirmation = confirmationRepository.findByWithdrawalId(withdrawal.id())
             .orElseGet(() -> confirmationRepository.save(WithdrawalConfirmation.start(
                 withdrawal.id(),
                 broadcast.txHash(),
-                Math.max(0, (int) observed),
+                Math.max(0, (int) consensus.confirmations()),
                 network.requiredConfirmations(),
                 clock.instant()
             )));
         int previous = confirmation.confirmations();
+        if (!consensus.agreed()) {
+            if (consensus.status() == BlockchainConsensusStatus.TRANSACTION_NOT_FOUND && previous > 0) {
+                recordReorg(withdrawal, confirmation, broadcast.txHash(), previous, 0);
+            } else if (consensus.status() == BlockchainConsensusStatus.PROVIDER_DISAGREEMENT
+                || consensus.status() == BlockchainConsensusStatus.INSUFFICIENT_PROVIDERS
+                || consensus.status() == BlockchainConsensusStatus.REORG_SUSPECTED) {
+                String reason = "blockchain consensus failed: " + consensus.status();
+                confirmation.markReorgDetected(reason, clock.instant());
+                queueService.markChainReviewRequired(withdrawal, CONFIRMATION_ACTOR, reason);
+                auditService.record(WalletAuditEventType.WITHDRAWAL_CHAIN_REVIEW_REQUIRED, withdrawal.id(), CONFIRMATION_ACTOR, reason);
+            }
+            return;
+        }
+        long observed = consensus.confirmations();
         if (observed < 0 || observed < previous) {
             recordReorg(withdrawal, confirmation, broadcast.txHash(), previous, Math.max(0, (int) observed));
             return;

@@ -2,6 +2,7 @@ package com.helium.core.wallet.infrastructure.blockchain;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.helium.core.wallet.application.BlockchainTransactionObservation;
 import com.helium.core.wallet.infrastructure.rpc.CircuitBreakerClient;
 import java.math.BigInteger;
 import java.net.URI;
@@ -9,6 +10,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Component;
@@ -56,8 +58,8 @@ public class EthereumRpcClient {
 
     public String sendRawTransaction(String signedRawTransactionHex) {
         String payload = requireHex(signedRawTransactionHex, "signedRawTransactionHex");
-        return circuitBreaker.executeWithHedging("ETH", nodeUrl ->
-            rpc(nodeUrl, "eth_sendRawTransaction", List.of(payload)).asText(), 1_000);
+        return circuitBreaker.executeWithFailover("ETH", nodeUrl ->
+            rpc(nodeUrl, "eth_sendRawTransaction", List.of(payload)).asText());
     }
 
     public long getConfirmations(String txHash) {
@@ -78,6 +80,63 @@ public class EthereumRpcClient {
             BigInteger included = quantity(blockNumber);
             return latest.subtract(included).add(BigInteger.ONE).max(BigInteger.ZERO).longValue();
         }, 1_000);
+    }
+
+    public BlockchainTransactionObservation observeTransaction(String nodeUrl, String providerId, String txHash, Instant observedAt) throws Exception {
+        String hash = requireHex(txHash, "txHash");
+        JsonNode receipt = rpc(nodeUrl, "eth_getTransactionReceipt", List.of(hash));
+        if (receipt.isNull() || receipt.isMissingNode()) {
+            JsonNode transaction = rpc(nodeUrl, "eth_getTransactionByHash", List.of(hash));
+            boolean observed = !transaction.isNull() && !transaction.isMissingNode();
+            return new BlockchainTransactionObservation(
+                "ETH",
+                txHash,
+                providerId,
+                observed,
+                false,
+                null,
+                null,
+                observed ? 0L : null,
+                observed ? "PENDING" : "NOT_FOUND",
+                observedAt
+            );
+        }
+        String status = receipt.path("status").asText();
+        boolean success = !"0x0".equalsIgnoreCase(status);
+        JsonNode blockNumber = receipt.path("blockNumber");
+        Long includedAt = blockNumber.isMissingNode() || blockNumber.isNull() ? null : quantity(blockNumber).longValue();
+        Long confirmations = null;
+        if (includedAt != null) {
+            BigInteger latest = quantity(rpc(nodeUrl, "eth_blockNumber", List.of()));
+            confirmations = latest.subtract(BigInteger.valueOf(includedAt)).add(BigInteger.ONE).max(BigInteger.ZERO).longValue();
+        }
+        return new BlockchainTransactionObservation(
+            "ETH",
+            txHash,
+            providerId,
+            true,
+            success && includedAt != null,
+            includedAt,
+            receipt.path("blockHash").isTextual() ? receipt.path("blockHash").asText() : null,
+            confirmations,
+            success ? "SUCCESS" : "REVERTED",
+            observedAt
+        );
+    }
+
+    public CanonicalBlockReference getCanonicalBlock(long height) {
+        return circuitBreaker.executeWithFailover("ETH", nodeUrl -> {
+            JsonNode block = rpc(nodeUrl, "eth_getBlockByNumber", List.of(hex(BigInteger.valueOf(height)), false));
+            if (block.isMissingNode() || block.isNull()) {
+                throw new IllegalStateException("Ethereum block was not found at height " + height);
+            }
+            return new CanonicalBlockReference(
+                "ETH",
+                height,
+                block.path("hash").asText(),
+                block.path("parentHash").isTextual() ? block.path("parentHash").asText() : null
+            );
+        });
     }
 
     private JsonNode rpc(String nodeUrl, String method, List<Object> params) throws Exception {
