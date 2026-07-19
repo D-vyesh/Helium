@@ -4,6 +4,7 @@ import com.helium.core.wallet.infrastructure.rpc.BlockchainProviderPool.RpcProvi
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.HexFormat;
@@ -63,12 +64,12 @@ public class RpcProviderHealthPersistence {
             provider.failureCount(),
             provider.timeoutCount(),
             provider.lastLatency().toMillis(),
-            provider.lastSuccessAt(),
-            provider.lastFailureAt(),
-            provider.retryAfterAt(),
-            provider.disabledAt(),
+            timestamp(provider.lastSuccessAt()),
+            timestamp(provider.lastFailureAt()),
+            timestamp(provider.retryAfterAt()),
+            timestamp(provider.disabledAt()),
             provider.lastConsistencyIssue(),
-            now
+            timestamp(now)
         );
     }
 
@@ -93,6 +94,10 @@ public class RpcProviderHealthPersistence {
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 is unavailable", exception);
         }
+    }
+
+    private static Timestamp timestamp(Instant instant) {
+        return instant == null ? null : Timestamp.from(instant);
     }
 
     public record PersistedManualProviderState(String providerId, boolean manuallyDisabled, Instant disabledAt) {}

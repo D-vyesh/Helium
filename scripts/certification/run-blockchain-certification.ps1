@@ -22,11 +22,51 @@ function Invoke-Native {
     }
 }
 
+function Get-CertificationValue {
+    param(
+        [string]$Name,
+        [string]$Default
+    )
+
+    $fromEnvironment = [Environment]::GetEnvironmentVariable($Name)
+    if ($fromEnvironment) {
+        return $fromEnvironment
+    }
+
+    $envFile = Join-Path $Root ".env"
+    if (Test-Path $envFile) {
+        foreach ($line in Get-Content $envFile) {
+            $trimmed = $line.Trim()
+            if (-not $trimmed -or $trimmed.StartsWith("#")) {
+                continue
+            }
+
+            $separator = $trimmed.IndexOf("=")
+            if ($separator -le 0) {
+                continue
+            }
+
+            $key = $trimmed.Substring(0, $separator).Trim()
+            if ($key -ne $Name) {
+                continue
+            }
+
+            $value = $trimmed.Substring($separator + 1).Trim()
+            if (($value.StartsWith('"') -and $value.EndsWith('"')) -or ($value.StartsWith("'") -and $value.EndsWith("'"))) {
+                $value = $value.Substring(1, $value.Length - 2)
+            }
+            return $value
+        }
+    }
+
+    return $Default
+}
+
 try {
     Set-Location $Root
 
     Write-Status "COMPOSE CONFIG" "RUNNING"
-    Invoke-Native "docker" @("compose", "-f", $ComposeFile, "config")
+    Invoke-Native "docker" @("compose", "-f", $ComposeFile, "config", "--quiet")
     Write-Status "COMPOSE CONFIG" "PASS"
 
     Write-Status "STACK START" "RUNNING"
@@ -36,8 +76,8 @@ try {
     Write-Status "STACK PS" "RUNNING"
     Invoke-Native "docker" @("compose", "-f", $ComposeFile, "ps")
 
-    $btcUser = if ($env:CERT_BTC_RPC_USER) { $env:CERT_BTC_RPC_USER } else { "helium" }
-    $btcPassword = if ($env:CERT_BTC_RPC_PASSWORD) { $env:CERT_BTC_RPC_PASSWORD } else { "helium" }
+    $btcUser = Get-CertificationValue "CERT_BTC_RPC_USER" "helium"
+    $btcPassword = Get-CertificationValue "CERT_BTC_RPC_PASSWORD" "helium"
 
     Write-Status "BTC RPC" "RUNNING"
     Invoke-Native "docker" @("compose", "-f", $ComposeFile, "exec", "-T", "bitcoin", "bitcoin-cli", "-regtest", "-rpcuser=$btcUser", "-rpcpassword=$btcPassword", "getblockchaininfo")

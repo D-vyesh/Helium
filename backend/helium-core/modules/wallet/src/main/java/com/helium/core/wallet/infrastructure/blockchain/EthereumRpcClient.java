@@ -157,8 +157,9 @@ public class EthereumRpcClient {
             throw new IllegalStateException("Ethereum RPC " + method + " failed with HTTP " + response.statusCode());
         }
         JsonNode root = objectMapper.readTree(response.body());
-        if (!root.path("error").isNull()) {
-            throw new IllegalStateException("Ethereum RPC " + method + " failed: " + root.path("error"));
+        JsonNode error = root.path("error");
+        if (!error.isMissingNode() && !error.isNull()) {
+            throw new IllegalStateException("Ethereum RPC " + method + " failed: " + error);
         }
         return root.path("result");
     }

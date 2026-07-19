@@ -7,6 +7,30 @@ ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 
 cd "$ROOT_DIR"
 
+cert_value() {
+  key="$1"
+  default_value="$2"
+  current_value="$(printenv "$key" 2>/dev/null || true)"
+  if [ -n "$current_value" ]; then
+    printf '%s' "$current_value"
+    return
+  fi
+  if [ -f ".env" ]; then
+    line="$(grep -E "^[[:space:]]*${key}[[:space:]]*=" .env | tail -n 1 || true)"
+    if [ -n "$line" ]; then
+      value="${line#*=}"
+      value="$(printf '%s' "$value" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+      value="${value%\"}"
+      value="${value#\"}"
+      value="${value%\'}"
+      value="${value#\'}"
+      printf '%s' "$value"
+      return
+    fi
+  fi
+  printf '%s' "$default_value"
+}
+
 status() {
   printf '%s: %s\n' "$1" "$2"
 }
@@ -19,7 +43,7 @@ cleanup() {
 trap cleanup EXIT
 
 status "COMPOSE CONFIG" "RUNNING"
-docker compose -f "$COMPOSE_FILE" config >/dev/null
+docker compose -f "$COMPOSE_FILE" config --quiet >/dev/null
 status "COMPOSE CONFIG" "PASS"
 
 status "STACK START" "RUNNING"
@@ -30,8 +54,10 @@ status "STACK PS" "RUNNING"
 docker compose -f "$COMPOSE_FILE" ps
 
 status "BTC RPC" "RUNNING"
-docker compose -f "$COMPOSE_FILE" exec -T bitcoin bitcoin-cli -regtest -rpcuser="${CERT_BTC_RPC_USER:-helium}" -rpcpassword="${CERT_BTC_RPC_PASSWORD:-helium}" getblockchaininfo >/dev/null
-docker compose -f "$COMPOSE_FILE" exec -T bitcoin bitcoin-cli -regtest -rpcuser="${CERT_BTC_RPC_USER:-helium}" -rpcpassword="${CERT_BTC_RPC_PASSWORD:-helium}" getblockcount >/dev/null
+BTC_RPC_USER="$(cert_value CERT_BTC_RPC_USER helium)"
+BTC_RPC_PASSWORD="$(cert_value CERT_BTC_RPC_PASSWORD helium)"
+docker compose -f "$COMPOSE_FILE" exec -T bitcoin bitcoin-cli -regtest -rpcuser="$BTC_RPC_USER" -rpcpassword="$BTC_RPC_PASSWORD" getblockchaininfo >/dev/null
+docker compose -f "$COMPOSE_FILE" exec -T bitcoin bitcoin-cli -regtest -rpcuser="$BTC_RPC_USER" -rpcpassword="$BTC_RPC_PASSWORD" getblockcount >/dev/null
 status "BTC RPC" "PASS"
 
 status "ETH RPC" "RUNNING"

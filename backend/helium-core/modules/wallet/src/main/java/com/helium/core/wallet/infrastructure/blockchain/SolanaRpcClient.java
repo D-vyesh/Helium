@@ -263,8 +263,9 @@ public class SolanaRpcClient {
             throw new IllegalStateException("Solana RPC " + method + " failed with HTTP " + response.statusCode());
         }
         JsonNode root = objectMapper.readTree(response.body());
-        if (!root.path("error").isNull()) {
-            throw new IllegalStateException("Solana RPC " + method + " failed: " + root.path("error"));
+        JsonNode error = root.path("error");
+        if (!error.isMissingNode() && !error.isNull()) {
+            throw new IllegalStateException("Solana RPC " + method + " failed: " + error);
         }
         return root.path("result");
     }

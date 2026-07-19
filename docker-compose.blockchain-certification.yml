@@ -27,7 +27,7 @@ services:
       retries: 20
 
   bitcoin:
-    image: ruimarinho/bitcoin-core:25
+    image: bitcoin/bitcoin:28.0
     command:
       - "-regtest=1"
       - "-server=1"

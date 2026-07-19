@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
@@ -57,7 +58,7 @@ public class NotificationService {
             title,
             message,
             json(payload),
-            now
+            timestamp(now)
         );
         NotificationView notification = new NotificationView(id, userId, category, eventType, title, message, payload, false, now, null);
         webSocketHandler.broadcast(userId, "notification", notification);
@@ -92,7 +93,7 @@ public class NotificationService {
             """,
             (rs, rowNum) -> notification(rs),
             userId,
-            before,
+            timestamp(before),
             size
         );
     }
@@ -115,7 +116,7 @@ public class NotificationService {
             set read_at = coalesce(read_at, ?)
             where id = ? and user_id = ? and deleted_at is null
             """,
-            clock.instant(),
+            timestamp(clock.instant()),
             notificationId,
             userId
         );
@@ -130,7 +131,7 @@ public class NotificationService {
             set read_at = coalesce(read_at, ?)
             where user_id = ? and read_at is null and deleted_at is null
             """,
-            clock.instant(),
+            timestamp(clock.instant()),
             userId
         );
         webSocketHandler.broadcast(userId, "unread-count", new UnreadCount(unreadCount(userId)));
@@ -144,7 +145,7 @@ public class NotificationService {
             set deleted_at = coalesce(deleted_at, ?)
             where id = ? and user_id = ?
             """,
-            clock.instant(),
+            timestamp(clock.instant()),
             notificationId,
             userId
         );
@@ -165,6 +166,10 @@ public class NotificationService {
             rs.getTimestamp("created_at").toInstant(),
             readAt
         );
+    }
+
+    private static Timestamp timestamp(Instant instant) {
+        return instant == null ? null : Timestamp.from(instant);
     }
 
     private String json(Map<String, Object> payload) {

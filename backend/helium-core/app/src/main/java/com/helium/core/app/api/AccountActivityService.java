@@ -3,6 +3,7 @@ package com.helium.core.app.api;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.helium.core.authuser.application.SecurityContextData;
+import java.sql.Timestamp;
 import java.time.Clock;
 import java.util.Map;
 import java.util.UUID;
@@ -52,7 +53,7 @@ public class AccountActivityService {
             securityContext == null ? null : securityContext.userAgent(),
             securityContext == null ? null : securityContext.deviceInfo(),
             json(metadata),
-            clock.instant()
+            Timestamp.from(clock.instant())
         );
     }
 

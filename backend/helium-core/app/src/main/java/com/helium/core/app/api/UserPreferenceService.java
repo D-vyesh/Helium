@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.helium.core.authuser.application.SecurityContextData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -93,8 +94,8 @@ public class UserPreferenceService {
             json(normalized.workspaceLayout()),
             json(normalized.orderDefaults()),
             json(normalized.notificationPreferences()),
-            now,
-            now
+            timestamp(now),
+            timestamp(now)
         );
 
         UserPreferenceView view = find(userId);
@@ -150,8 +151,8 @@ public class UserPreferenceService {
             json(fallback.workspaceLayout()),
             json(fallback.orderDefaults()),
             json(fallback.notificationPreferences()),
-            now,
-            now
+            timestamp(now),
+            timestamp(now)
         );
     }
 
@@ -278,6 +279,10 @@ public class UserPreferenceService {
                 "market", true
             )
         );
+    }
+
+    private static Timestamp timestamp(Instant instant) {
+        return instant == null ? null : Timestamp.from(instant);
     }
 
     private String json(Map<String, Object> payload) {

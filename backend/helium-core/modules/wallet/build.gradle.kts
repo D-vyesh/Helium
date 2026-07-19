@@ -7,6 +7,7 @@ dependencies {
     implementation(project(":modules:auth-user"))
     implementation(project(":modules:compliance-lite"))
     implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.security:spring-security-core")
     implementation("io.micrometer:micrometer-core")
 
     implementation("org.web3j:core:4.10.3")

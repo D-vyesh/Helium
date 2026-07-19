@@ -94,8 +94,9 @@ public class BlockchainRpcHealthMonitor {
             throw new IllegalStateException("RPC health check failed with HTTP " + response.statusCode());
         }
         JsonNode root = objectMapper.readTree(response.body());
-        if (!root.path("error").isNull()) {
-            throw new IllegalStateException("RPC health check failed: " + root.path("error"));
+        JsonNode error = root.path("error");
+        if (!error.isMissingNode() && !error.isNull()) {
+            throw new IllegalStateException("RPC health check failed: " + error);
         }
         return root.path("result");
     }

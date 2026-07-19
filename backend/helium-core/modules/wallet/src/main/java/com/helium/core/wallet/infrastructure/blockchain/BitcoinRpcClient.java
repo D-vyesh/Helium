@@ -242,8 +242,8 @@ public class BitcoinRpcClient {
             throw new IllegalStateException("Bitcoin RPC " + method + " failed with HTTP " + response.statusCode());
         }
         JsonNode root = objectMapper.readTree(response.body());
-        if (!root.path("error").isNull()) {
-            JsonNode error = root.path("error");
+        JsonNode error = root.path("error");
+        if (!error.isMissingNode() && !error.isNull()) {
             throw new BitcoinRpcException(method, error.path("code").asInt(Integer.MIN_VALUE), error.toString());
         }
         return root.path("result");

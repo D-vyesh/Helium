@@ -8,6 +8,7 @@ import com.helium.core.wallet.application.BlockchainObservationConsensus;
 import com.helium.core.wallet.application.BlockchainObservationConsensusService;
 import com.helium.core.wallet.application.UpdateDepositConfirmationsCommand;
 import com.helium.core.wallet.application.WalletAuditService;
+import com.helium.core.authuser.application.TrustedSystemActorAuthentication;
 import com.helium.core.wallet.domain.BlockchainNetwork;
 import com.helium.core.wallet.domain.ChainMonitorState;
 import com.helium.core.wallet.domain.Deposit;
@@ -23,6 +24,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -69,11 +72,21 @@ public class ChainMonitorJob {
     @Scheduled(fixedDelay = 15000)
     @Transactional
     public void pollNetworks() {
-        log.debug("Polling blockchain networks for new deposits...");
-        networkRepository.findAll().stream()
-            .filter(BlockchainNetwork::depositEnabled)
-            .filter(network -> registry.getProvider(network.networkCode()).isPresent())
-            .forEach(this::pollNetwork);
+        Authentication previous = SecurityContextHolder.getContext().getAuthentication();
+        SecurityContextHolder.getContext().setAuthentication(TrustedSystemActorAuthentication.chainMonitor());
+        try {
+            log.debug("Polling blockchain networks for new deposits...");
+            networkRepository.findAll().stream()
+                .filter(BlockchainNetwork::depositEnabled)
+                .filter(network -> registry.getProvider(network.networkCode()).isPresent())
+                .forEach(this::pollNetwork);
+        } finally {
+            if (previous == null) {
+                SecurityContextHolder.clearContext();
+            } else {
+                SecurityContextHolder.getContext().setAuthentication(previous);
+            }
+        }
     }
 
     void pollNetwork(BlockchainNetwork network) {

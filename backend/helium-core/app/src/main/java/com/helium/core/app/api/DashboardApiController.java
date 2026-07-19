@@ -14,6 +14,7 @@ import java.math.MathContext;
 import java.math.RoundingMode;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Comparator;
@@ -127,8 +128,8 @@ public class DashboardApiController {
             marketSymbol,
             request.pinned(),
             Math.max(0, request.sortOrder()),
-            clock.instant(),
-            clock.instant()
+            Timestamp.from(clock.instant()),
+            Timestamp.from(clock.instant())
         );
         return watchlist(userId);
     }
