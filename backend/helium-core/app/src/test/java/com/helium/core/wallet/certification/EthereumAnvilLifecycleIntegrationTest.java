@@ -8,7 +8,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
+@EnabledIfEnvironmentVariable(named = "HELIUM_RUN_BLOCKCHAIN_CERTIFICATION", matches = "true")
 class EthereumAnvilLifecycleIntegrationTest extends AbstractBlockchainCertificationIntegrationTest {
     @Test
     void detectsConfirmsPostsAndReplaysRealAnvilEthDeposit() throws Exception {

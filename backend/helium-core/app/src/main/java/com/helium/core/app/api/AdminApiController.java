@@ -2,10 +2,21 @@ package com.helium.core.app.api;
 
 import com.helium.core.admin.application.AdminSecurityService;
 import com.helium.core.admin.application.ReconciliationPort;
+import com.helium.core.wallet.application.ApproveWithdrawalCommand;
+import com.helium.core.wallet.application.RejectWithdrawalCommand;
+import com.helium.core.wallet.application.WithdrawalApprovalPort;
+import com.helium.core.wallet.application.WithdrawalView;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.UUID;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,11 +28,18 @@ public class AdminApiController {
     private final AdminSecurityService securityService;
     private final ApiReadService readService;
     private final ReconciliationPort reconciliationPort;
+    private final WithdrawalApprovalPort withdrawalApprovalPort;
 
-    public AdminApiController(AdminSecurityService securityService, ApiReadService readService, ReconciliationPort reconciliationPort) {
+    public AdminApiController(
+        AdminSecurityService securityService,
+        ApiReadService readService,
+        ReconciliationPort reconciliationPort,
+        WithdrawalApprovalPort withdrawalApprovalPort
+    ) {
         this.securityService = securityService;
         this.readService = readService;
         this.reconciliationPort = reconciliationPort;
+        this.withdrawalApprovalPort = withdrawalApprovalPort;
     }
 
     @GetMapping("/users")
@@ -77,4 +95,21 @@ public class AdminApiController {
         securityService.requireAdminActor();
         return readService.pendingWithdrawals();
     }
+
+    @PostMapping("/withdrawals/{withdrawalId}/approve")
+    public WithdrawalView approveWithdrawal(@PathVariable UUID withdrawalId) {
+        securityService.requireAdminActor();
+        return withdrawalApprovalPort.approve(new ApproveWithdrawalCommand(withdrawalId));
+    }
+
+    @PostMapping("/withdrawals/{withdrawalId}/reject")
+    public WithdrawalView rejectWithdrawal(
+        @PathVariable UUID withdrawalId,
+        @Valid @RequestBody RejectWithdrawalRequest request
+    ) {
+        securityService.requireAdminActor();
+        return withdrawalApprovalPort.reject(new RejectWithdrawalCommand(withdrawalId, request.reason()));
+    }
+
+    public record RejectWithdrawalRequest(@NotBlank @Size(max = 500) String reason) {}
 }

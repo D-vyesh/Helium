@@ -1,5 +1,6 @@
 package com.helium.core.authuser.application;
 
+import com.helium.core.authuser.domain.AuthValidationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -16,7 +17,7 @@ public class EnterpriseIdentityService {
 
     public void configureSsoForOrganization(UUID orgId, String samlMetadataUrl) {
         log.info("Configuring SAML SSO for organization {} with metadata URL: {}", orgId, samlMetadataUrl);
-        // Stub: parses SAML metadata, establishes trust with IdP
+        throw new AuthValidationException("SAML SSO is not configured; a verified identity-provider adapter is required");
     }
 
     public void registerWebAuthnCredential(UUID userId, String credentialId, String publicKey) {
@@ -26,7 +27,6 @@ public class EnterpriseIdentityService {
 
     public boolean requireStepUpAuthentication(UUID userId, String action) {
         log.warn("PAM ALERT: Step-up authentication required for user {} attempting privileged action: {}", userId, action);
-        // Stub: Triggers a WebAuthn challenge to the frontend
-        return true; 
+        throw new AuthValidationException("WebAuthn step-up authentication is not configured");
     }
 }

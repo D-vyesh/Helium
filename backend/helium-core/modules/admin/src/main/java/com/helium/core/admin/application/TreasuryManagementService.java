@@ -1,10 +1,8 @@
 package com.helium.core.admin.application;
 
-import com.helium.core.wallet.application.WalletLedgerAccounts;
-
-import com.helium.core.authuser.domain.Role;
-import com.helium.core.admin.application.GovernanceApprovalService;
+import com.helium.core.ledger.application.TreasuryAccountingService;
 import java.math.BigDecimal;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -13,45 +11,29 @@ import org.springframework.stereotype.Service;
 public class TreasuryManagementService {
     private static final Logger log = LoggerFactory.getLogger(TreasuryManagementService.class);
 
-    private final GovernanceApprovalService governanceApprovalService;
-    private final WalletLedgerAccounts ledgerAccounts;
+    private final TreasuryAccountingService treasuryAccountingService;
 
-    public TreasuryManagementService(GovernanceApprovalService governanceApprovalService, WalletLedgerAccounts ledgerAccounts) {
-        this.governanceApprovalService = governanceApprovalService;
-        this.ledgerAccounts = ledgerAccounts;
+    public TreasuryManagementService(TreasuryAccountingService treasuryAccountingService) {
+        this.treasuryAccountingService = treasuryAccountingService;
     }
 
     public void monitorWalletFragmentation(String assetCode) {
-        // Mocking the query to the active hot/cold wallets 
-        // In reality, this would query the CustodyProvider for Hot and Cold balances
-        BigDecimal hotWalletBalance = new BigDecimal("150000.00");
-        BigDecimal coldWalletBalance = new BigDecimal("850000.00");
-        BigDecimal totalReserves = hotWalletBalance.add(coldWalletBalance);
-
-        // Fetch User Liabilities
-        // This relies on the new query added to BalanceSnapshotRepository in PoR
-        BigDecimal totalUserLiabilities = new BigDecimal("950000.00");
+        Map<String, Object> nav = treasuryAccountingService.calculateDailyNav();
+        BigDecimal totalReserves = (BigDecimal) nav.get("totalExternalAssets");
+        BigDecimal totalUserLiabilities = (BigDecimal) nav.get("totalUserLiabilities");
 
         if (totalReserves.compareTo(totalUserLiabilities) < 0) {
-            log.error("CRITICAL ALARM: Fractional Reserve Detected! Liabilities ({}) > Reserves ({})", 
+            log.error("CRITICAL ALARM: Ledger reserve coverage is negative for {}. Liabilities ({}) > external assets ({})",
+                assetCode,
                 totalUserLiabilities, totalReserves);
-            // Trigger emergency procedures
         }
 
-        BigDecimal hotWalletRatio = hotWalletBalance.divide(totalReserves, 4, java.math.RoundingMode.HALF_UP);
-        
-        // If hot wallet falls below 10%, we need to sweep from Cold
-        if (hotWalletRatio.compareTo(new BigDecimal("0.10")) < 0) {
-            log.warn("Hot wallet ratio ({}%) is below 10% target. Initiating Cold Sweep Approval.", 
-                hotWalletRatio.multiply(new BigDecimal("100")));
-            
-            // Initiate a Maker/Checker request for the sweep
-            governanceApprovalService.initiateApproval(
-                "COLD_TO_HOT_SWEEP", 
-                "system-monitor", 
-                Role.TREASURY_ADMIN, 
-                "{\"asset\":\"" + assetCode + "\",\"amount\":\"50000.00\"}"
-            );
-        }
+        log.info(
+            "Ledger reserve coverage for {}: external assets={}, user liabilities={}. "
+                + "Hot/cold fragmentation requires an authenticated custody balance provider.",
+            assetCode,
+            totalReserves,
+            totalUserLiabilities
+        );
     }
 }

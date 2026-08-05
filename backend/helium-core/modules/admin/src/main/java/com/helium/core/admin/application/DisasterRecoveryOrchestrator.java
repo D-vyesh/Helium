@@ -16,12 +16,10 @@ public class DisasterRecoveryOrchestrator {
 
     public void orchestrateRegionalFailover(String sourceRegion, String targetRegion) {
         log.error("DR INITIATED: Orchestrating cross-region failover from {} to {}", sourceRegion, targetRegion);
-        
-        log.info("DR STEP 1: Fencing primary database in {}", sourceRegion);
-        log.info("DR STEP 2: Promoting read-replica to primary in {}", targetRegion);
-        log.info("DR STEP 3: Updating Global Load Balancer DNS records to target {}", targetRegion);
-        
-        log.info("DR COMPLETE: Regional failover finished. Resuming exchange operations.");
-        exchangeStatusService.updateComponentStatus("api-gateway", "OPERATIONAL");
+        exchangeStatusService.updateComponentStatus("api-gateway", "DEGRADED");
+        log.error(
+            "DR execution requires infrastructure-specific fencing, replica promotion, and traffic cutover. "
+                + "This service will not claim a successful failover or resume operations without external verification."
+        );
     }
 }

@@ -3,6 +3,12 @@ plugins {
     id("io.spring.dependency-management")
 }
 
+import org.gradle.api.tasks.testing.Test
+
+tasks.withType<Test>().configureEach {
+    systemProperty("helium.market-data.live.enabled", "false")
+}
+
 dependencies {
     implementation(project(":modules:auth-user"))
     implementation(project(":modules:compliance-lite"))

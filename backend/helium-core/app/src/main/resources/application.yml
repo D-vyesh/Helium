@@ -156,3 +156,7 @@ helium:
       order-book-limit: ${HELIUM_MARKET_DATA_ORDER_BOOK_LIMIT:100}
       trade-limit: ${HELIUM_MARKET_DATA_TRADE_LIMIT:80}
       candle-limit: ${HELIUM_MARKET_DATA_CANDLE_LIMIT:240}
+  compliance:
+    sanctions:
+      base-url: ${HELIUM_SANCTIONS_BASE_URL:}
+      api-token: ${HELIUM_SANCTIONS_API_TOKEN:}

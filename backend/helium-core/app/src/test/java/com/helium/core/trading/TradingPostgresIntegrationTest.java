@@ -67,11 +67,13 @@ import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 @SpringBootTest(classes = HeliumCoreApplication.class)
+@ActiveProfiles("no-matching")
 @Testcontainers
 class TradingPostgresIntegrationTest {
     private static final SecurityContextData CONTEXT = new SecurityContextData("127.0.0.1", "trading-test");
@@ -136,6 +138,7 @@ class TradingPostgresIntegrationTest {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
+        registry.add("helium.market-data.live.enabled", () -> "false");
     }
 
     @BeforeEach

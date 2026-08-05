@@ -2,12 +2,13 @@
 
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/features/auth/store";
 import { heliumApi } from "@/lib/api/client";
 import type { AdminAuditRecord, AdminMarketControl, SessionUser, WithdrawalRecord } from "@/lib/api/types";
 import { queryKeys } from "@/lib/query/keys";
-import { EmptyState, ErrorState, LoadingState, NotImplemented } from "@/components/ui/state";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
+import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/table";
 import { formatAmount } from "@/lib/utils/format";
 
@@ -103,26 +104,71 @@ function AdminUserManagement({ users }: Readonly<{ users: SessionUser[] }>) {
 }
 
 function WithdrawalApprovalQueue({ withdrawals }: Readonly<{ withdrawals: WithdrawalRecord[] }>) {
+  const queryClient = useQueryClient();
+  const [actionError, setActionError] = useState<unknown>();
+  const approveMutation = useMutation({
+    mutationFn: heliumApi.approveWithdrawal,
+    onSuccess: async () => {
+      setActionError(undefined);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.adminPendingWithdrawals });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.adminAudit });
+    },
+    onError: (error) => setActionError(error)
+  });
+  const rejectMutation = useMutation({
+    mutationFn: ({ withdrawalId, reason }: { withdrawalId: string; reason: string }) => heliumApi.rejectWithdrawal(withdrawalId, reason),
+    onSuccess: async () => {
+      setActionError(undefined);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.adminPendingWithdrawals });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.adminAudit });
+    },
+    onError: (error) => setActionError(error)
+  });
+  const busy = approveMutation.isPending || rejectMutation.isPending;
+
+  const reject = (withdrawalId: string) => {
+    const reason = window.prompt("Reason for rejecting this withdrawal:");
+    if (!reason?.trim()) return;
+    rejectMutation.mutate({ withdrawalId, reason: reason.trim() });
+  };
+
   return (
     <section className="rounded border border-slate-800 bg-slate-900 p-4">
       <PanelHeader title="Withdrawal approval queue" />
+      {actionError ? <ErrorState title="Withdrawal action failed" error={actionError} /> : null}
       {withdrawals.length === 0 ? (
         <EmptyState title="No pending withdrawals" detail="New requests will appear here for finance review." />
       ) : (
         <DataTable
-          columns={["Asset", "Amount", "Network", "Destination", "Status"]}
+          columns={["Asset", "Amount", "Network", "Destination", "Status", "Actions"]}
           rows={withdrawals.map((withdrawal) => [
             <span key="asset">{withdrawal.asset}</span>,
             <span key="amount">{formatAmount(withdrawal.amount)}</span>,
             <span key="network">{withdrawal.network}</span>,
             <span key="destination" className="font-mono text-xs">{withdrawal.destination}</span>,
-            <StatusBadge key="status" value={String(withdrawal.status)} />
+            <StatusBadge key="status" value={String(withdrawal.status)} />,
+            <div key="actions" className="flex gap-2">
+              <Button
+                disabled={busy || withdrawal.status !== "REQUESTED"}
+                onClick={() => approveMutation.mutate(withdrawal.id)}
+                size="sm"
+                type="button"
+              >
+                Approve
+              </Button>
+              <Button
+                disabled={busy || withdrawal.status !== "REQUESTED"}
+                onClick={() => reject(withdrawal.id)}
+                size="sm"
+                type="button"
+                variant="secondary"
+              >
+                Reject
+              </Button>
+            </div>
           ])}
         />
       )}
-      <div className="mt-3">
-        <NotImplemented feature="Approving or rejecting withdrawals from this screen" />
-      </div>
     </section>
   );
 }

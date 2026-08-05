@@ -1,0 +1,52 @@
+name: helium-staging
+
+# Safe staging overlay for the root docker-compose.yml.
+#
+# This deliberately binds every published service to localhost and keeps actions
+# that can move assets disabled. It is suitable for a workstation or an isolated
+# staging VM; use the production-release runbook before enabling real custody or
+# public ingress.
+services:
+  postgres:
+    mem_limit: 512m
+    ports: !override
+      - "127.0.0.1:${POSTGRES_PORT:-15432}:5432"
+
+  redis:
+    mem_limit: 256m
+    ports: !override
+      - "127.0.0.1:${REDIS_PORT:-16379}:6379"
+
+  backend:
+    mem_limit: 1g
+    environment:
+      SPRING_PROFILES_ACTIVE: staging
+      HELIUM_ENVIRONMENT: staging
+      # The base image permits the JVM to size itself from all host memory.
+      # Keep the local staging process within a predictable budget instead.
+      JAVA_OPTS: "-Xms128m -Xmx512m -XX:MaxMetaspaceSize=256m -XX:+ExitOnOutOfMemoryError"
+      HELIUM_EMAIL_ENABLED: "false"
+      # Staging has no SMTP service; exclude it from the aggregate Docker health check.
+      MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
+      HELIUM_MARKET_DATA_LIVE_ENABLED: "false"
+      HELIUM_WALLET_CHAIN_MONITOR_ENABLED: "false"
+      HELIUM_WALLET_BUILDER_WORKER_ENABLED: "false"
+      HELIUM_CUSTODY_SIGNING_WORKER_ENABLED: "false"
+      HELIUM_WALLET_BROADCAST_WORKER_ENABLED: "false"
+      HELIUM_WALLET_CONFIRMATION_WORKER_ENABLED: "false"
+      HELIUM_WALLET_STUCK_MONITOR_ENABLED: "false"
+    ports: !override
+      - "127.0.0.1:${HELIUM_HTTP_PORT:-18080}:8080"
+
+  frontend:
+    mem_limit: 512m
+    build:
+      args:
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-HELIUM Staging}
+        NEXT_PUBLIC_HELIUM_API_BASE_URL: ${NEXT_PUBLIC_HELIUM_API_BASE_URL:-http://localhost:18080}
+        NEXT_PUBLIC_HELIUM_WS_BASE_URL: ${NEXT_PUBLIC_HELIUM_WS_BASE_URL:-ws://localhost:18080}
+    environment:
+      NEXT_PUBLIC_HELIUM_API_BASE_URL: ${NEXT_PUBLIC_HELIUM_API_BASE_URL:-http://localhost:18080}
+      NEXT_PUBLIC_HELIUM_WS_BASE_URL: ${NEXT_PUBLIC_HELIUM_WS_BASE_URL:-ws://localhost:18080}
+    ports: !override
+      - "127.0.0.1:${HELIUM_WEB_PORT:-13000}:3000"

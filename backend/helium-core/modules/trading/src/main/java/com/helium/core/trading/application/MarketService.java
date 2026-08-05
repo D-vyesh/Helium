@@ -70,8 +70,8 @@ class MarketService implements MarketAdministrationPort, MarketQueryPort {
             market.symbol(),
             market.baseAsset(),
             market.quoteAsset(),
-            market.minOrderQuantity().scale(), // Using scale placeholders, not accurate based on domain
-            market.minNotional().scale(),
+            market.priceScale(),
+            market.quantityScale(),
             market.minOrderQuantity(),
             market.minNotional(),
             market.enabled()

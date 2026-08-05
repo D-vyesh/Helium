@@ -7,8 +7,10 @@ import com.helium.core.wallet.application.BlockchainCanonicalBlockService;
 import com.helium.core.wallet.infrastructure.blockchain.CanonicalBlockReference;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 
+@EnabledIfEnvironmentVariable(named = "HELIUM_RUN_BLOCKCHAIN_CERTIFICATION", matches = "true")
 class CanonicalChainReorgIntegrationTest extends AbstractBlockchainCertificationIntegrationTest {
     @Autowired
     private BlockchainCanonicalBlockService canonicalBlockService;

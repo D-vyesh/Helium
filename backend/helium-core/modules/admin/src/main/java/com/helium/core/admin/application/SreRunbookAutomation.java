@@ -15,24 +15,11 @@ public class SreRunbookAutomation {
     }
 
     public void handleComponentDegradation(String componentName) {
-        log.info("SRE RUNBOOK ACTIVATED: Attempting self-healing for degraded component: {}", componentName);
-        
-        try {
-            // Simulated self-healing process
-            Thread.sleep(100); 
-            if ("matching-engine".equals(componentName)) {
-                log.info("SRE ACTION: Failing over to secondary Redis cluster.");
-            } else if ("wallet-custody".equals(componentName)) {
-                log.info("SRE ACTION: Rotating blockchain RPC provider to secondary node.");
-            }
-            
-            // Healing successful
-            log.info("SRE RECOVERY SUCCESS: Component {} restored to OPERATIONAL.", componentName);
-            exchangeStatusService.updateComponentStatus(componentName, "OPERATIONAL");
-
-        } catch (InterruptedException e) {
-            log.error("SRE RECOVERY FAILED. Escalating to PagerDuty.", e);
-            Thread.currentThread().interrupt();
-        }
+        exchangeStatusService.updateComponentStatus(componentName, "DEGRADED");
+        log.error(
+            "SRE runbook requested for {}. Automatic failover is not configured; "
+                + "an authorized operator must perform and verify recovery before marking it operational.",
+            componentName
+        );
     }
 }

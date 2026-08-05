@@ -1,6 +1,7 @@
 package com.helium.core.ledger.infrastructure;
 
 import com.helium.core.ledger.domain.BalanceSnapshot;
+import com.helium.core.ledger.domain.LedgerAccountOwnerType;
 import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.Optional;
@@ -17,6 +18,9 @@ public interface BalanceSnapshotRepository extends JpaRepository<BalanceSnapshot
 
     @Query("select b from BalanceSnapshot b where b.account.ownerType = 'USER' and b.assetCode = :assetCode and b.account.balanceType = 'AVAILABLE'")
     java.util.List<BalanceSnapshot> findAllUserAvailableBalances(@Param("assetCode") String assetCode);
+
+    @Query("select coalesce(sum(b.currentBalance), 0) from BalanceSnapshot b where b.account.ownerType = :ownerType")
+    java.math.BigDecimal totalBalanceByOwnerType(@Param("ownerType") LedgerAccountOwnerType ownerType);
 
     @Modifying
     @Query(

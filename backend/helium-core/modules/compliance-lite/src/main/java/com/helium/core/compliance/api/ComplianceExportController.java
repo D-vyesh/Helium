@@ -6,10 +6,12 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/v1/compliance/data")
@@ -29,10 +31,9 @@ public class ComplianceExportController {
     @GetMapping("/export")
     public ResponseEntity<String> requestDataExport() {
         UUID userId = currentUserId();
-        log.info("User {} requested GDPR data export", userId);
-        // Triggers async job to collect all user data, trades, and balances,
-        // then emails the user a secure download link.
-        return ResponseEntity.accepted().body("Data export initiated. You will receive an email shortly.");
+        log.warn("User {} requested GDPR data export, but no export workflow is configured", userId);
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+            .body("Data export is unavailable until a retention-aware export workflow is configured.");
     }
 
     /**
@@ -41,15 +42,13 @@ public class ComplianceExportController {
     @DeleteMapping("/delete")
     public ResponseEntity<String> requestAccountDeletion() {
         UUID userId = currentUserId();
-        log.info("User {} requested Account Deletion (Right to be Forgotten)", userId);
-        // Note: Financial regulations (e.g., BSA/AML) often require data retention for 5-7 years,
-        // which supersedes GDPR deletion. This endpoint would mark the account as closed,
-        // delete marketing/PII data where allowed, but retain financial records in a cold vault.
-        return ResponseEntity.accepted().body("Account deletion request received and is being processed according to regulatory retention periods.");
+        log.warn("User {} requested account deletion, but no retention-aware deletion workflow is configured", userId);
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+            .body("Account deletion is unavailable until a retention-aware workflow is configured.");
     }
 
     private UUID currentUserId() {
         return trustedActorProvider.currentUserId()
-            .orElseThrow(() -> new RuntimeException("authenticated session is required"));
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "authenticated session is required"));
     }
 }

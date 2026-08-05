@@ -181,6 +181,10 @@ export const heliumApi = {
   adminAudit: () => request<AdminAuditRecord[]>(`${prefix}/admin/audit`),
   adminMarkets: () => request<AdminMarketControl[]>(`${prefix}/admin/markets`),
   adminPendingWithdrawals: () => request<WithdrawalRecord[]>(`${prefix}/admin/withdrawals/pending`),
+  approveWithdrawal: (withdrawalId: string) =>
+    request<WithdrawalView>(`${prefix}/admin/withdrawals/${encodeURIComponent(withdrawalId)}/approve`, { method: "POST", body: {} }),
+  rejectWithdrawal: (withdrawalId: string, reason: string) =>
+    request<WithdrawalView>(`${prefix}/admin/withdrawals/${encodeURIComponent(withdrawalId)}/reject`, { method: "POST", body: { reason } }),
   reconciliationReports: () => request<ReconciliationReport[]>(`${prefix}/admin/reconciliation`),
   reconciliationDiscrepancies: () => request<ReconciliationDiscrepancy[]>(`${prefix}/admin/reconciliation/discrepancies`),
   exportReconciliationCsv: () => request<string>(`${prefix}/admin/reconciliation.csv`, { text: true })

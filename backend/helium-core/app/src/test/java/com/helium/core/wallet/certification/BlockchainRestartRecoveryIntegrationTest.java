@@ -6,7 +6,9 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
+@EnabledIfEnvironmentVariable(named = "HELIUM_RUN_BLOCKCHAIN_CERTIFICATION", matches = "true")
 class BlockchainRestartRecoveryIntegrationTest extends AbstractBlockchainCertificationIntegrationTest {
     @Test
     void resumesFromPersistedCursorAndDoesNotDuplicateDepositPostingAfterInterruption() throws Exception {

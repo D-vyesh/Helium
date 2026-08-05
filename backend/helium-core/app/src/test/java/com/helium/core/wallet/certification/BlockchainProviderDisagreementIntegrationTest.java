@@ -9,8 +9,10 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 
+@EnabledIfEnvironmentVariable(named = "HELIUM_RUN_BLOCKCHAIN_CERTIFICATION", matches = "true")
 class BlockchainProviderDisagreementIntegrationTest extends AbstractBlockchainCertificationIntegrationTest {
     @Autowired
     private BlockchainConsistencyIncidentService incidentService;

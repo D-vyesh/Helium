@@ -13,10 +13,10 @@ public class ExchangeStatusService {
     private final Map<String, String> componentStatus = new ConcurrentHashMap<>();
 
     public ExchangeStatusService() {
-        componentStatus.put("matching-engine", "OPERATIONAL");
-        componentStatus.put("wallet-custody", "OPERATIONAL");
-        componentStatus.put("ledger", "OPERATIONAL");
-        componentStatus.put("api-gateway", "OPERATIONAL");
+        componentStatus.put("matching-engine", "UNKNOWN");
+        componentStatus.put("wallet-custody", "UNKNOWN");
+        componentStatus.put("ledger", "UNKNOWN");
+        componentStatus.put("api-gateway", "UNKNOWN");
     }
 
     public void updateComponentStatus(String component, String status) {
@@ -24,12 +24,11 @@ public class ExchangeStatusService {
         componentStatus.put(component, status);
         
         if ("DEGRADED".equals(status) || "OUTAGE".equals(status)) {
-            // Stub: Trigger PagerDuty/Incident response system
-            log.error("INCIDENT: Triggering on-call paging for {} outage.", component);
+            log.error("INCIDENT: {} requires on-call notification; no paging provider is configured", component);
         }
     }
 
     public Map<String, String> getPublicStatus() {
-        return componentStatus;
+        return Map.copyOf(componentStatus);
     }
 }

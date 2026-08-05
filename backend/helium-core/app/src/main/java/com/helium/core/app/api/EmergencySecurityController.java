@@ -22,39 +22,47 @@ public class EmergencySecurityController {
     private final TrustedActorProvider trustedActorProvider;
     private final AuthorizationPort authorizationPort;
     private final ApplicationEventPublisher eventPublisher;
+    private final ApiKeyService apiKeyService;
+    private final EmergencySystemFreezeService emergencySystemFreezeService;
 
     public EmergencySecurityController(
         TrustedActorProvider trustedActorProvider,
         AuthorizationPort authorizationPort,
-        ApplicationEventPublisher eventPublisher
+        ApplicationEventPublisher eventPublisher,
+        ApiKeyService apiKeyService,
+        EmergencySystemFreezeService emergencySystemFreezeService
     ) {
         this.trustedActorProvider = trustedActorProvider;
         this.authorizationPort = authorizationPort;
         this.eventPublisher = eventPublisher;
+        this.apiKeyService = apiKeyService;
+        this.emergencySystemFreezeService = emergencySystemFreezeService;
     }
 
     @PostMapping("/revoke-all-keys")
-    public ResponseEntity<Void> revokeAllKeys() {
+    public ResponseEntity<GlobalKeyRevocationResponse> revokeAllKeys() {
         requireAdmin();
-        log.error("EMERGENCY: Administrator {} initiated a global revocation of all API keys", currentUserId());
-        
-        // This is a stub for the global key revocation logic
-        // In a real system, this might trigger a Vault token revocation,
-        // clear the Redis key cache entirely, and push a global kill switch event.
-        
-        // Triggering a generic rotation event to force all caches to clear.
+        UUID actorId = currentUserId();
+        int revoked = apiKeyService.revokeAll(actorId.toString());
+        log.error("EMERGENCY: Administrator {} revoked {} active API keys", actorId, revoked);
         eventPublisher.publishEvent(new SecretRotationEvent(this, "GLOBAL_EMERGENCY", "v-any", "v-emergency"));
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(new GlobalKeyRevocationResponse(revoked));
     }
 
     @PostMapping("/freeze-system")
-    public ResponseEntity<Void> freezeSystem() {
+    public ResponseEntity<SystemFreezeResponse> freezeSystem() {
         requireAdmin();
-        log.error("EMERGENCY: Administrator {} initiated a global system freeze (trading & withdrawals)", currentUserId());
-        
-        // Emits a system freeze event which Matching and Settlement engines would listen to.
-        eventPublisher.publishEvent(new SystemFreezeEvent(this, currentUserId(), "Admin requested system freeze"));
-        return ResponseEntity.ok().build();
+        UUID actorId = currentUserId();
+        String reason = "Admin requested system freeze";
+        EmergencySystemFreezeService.FreezeResult result = emergencySystemFreezeService.freeze(actorId, reason);
+        log.error("EMERGENCY: Administrator {} froze {} markets, {} assets, and {} networks", actorId,
+            result.haltedMarkets(), result.haltedAssets(), result.haltedNetworks());
+        eventPublisher.publishEvent(new SystemFreezeEvent(this, actorId, reason));
+        return ResponseEntity.ok(new SystemFreezeResponse(
+            result.haltedMarkets(),
+            result.haltedAssets(),
+            result.haltedNetworks()
+        ));
     }
 
     private void requireAdmin() {
@@ -68,4 +76,6 @@ public class EmergencySecurityController {
     }
     
     public record SystemFreezeEvent(Object source, UUID adminId, String reason) {}
+    public record GlobalKeyRevocationResponse(int revokedKeys) {}
+    public record SystemFreezeResponse(int haltedMarkets, int haltedAssets, int haltedNetworks) {}
 }

@@ -1,8 +1,10 @@
 package com.helium.core.matching.application;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 @Service
+@Profile("!no-matching")
 public class MatchingEngineService implements MatchingCommandPort {
     private final SubmitOrderService submitOrderService;
     private final CancelOrderService cancelOrderService;

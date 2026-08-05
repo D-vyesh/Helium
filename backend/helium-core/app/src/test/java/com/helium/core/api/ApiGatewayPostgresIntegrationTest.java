@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.helium.core.app.HeliumCoreApplication;
+import com.helium.core.app.api.ApiKeyService;
 import java.util.UUID;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -53,6 +54,9 @@ class ApiGatewayPostgresIntegrationTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private ApiKeyService apiKeyService;
+
     @LocalServerPort
     private int port;
 
@@ -63,6 +67,7 @@ class ApiGatewayPostgresIntegrationTest {
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("helium.outbox.enabled", () -> "false");
         registry.add("spring.task.scheduling.enabled", () -> "false");
+        registry.add("helium.market-data.live.enabled", () -> "false");
     }
 
     @BeforeEach
@@ -146,21 +151,16 @@ class ApiGatewayPostgresIntegrationTest {
 
     @Test
     void supportsProductionAuthEndpointFlow() throws Exception {
-        String signupResponse = mockMvc.perform(post("/api/v1/auth/signup")
+        mockMvc.perform(post("/api/v1/auth/signup")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {"email":"signup-api@example.com","password":"Initial-password-123","confirmPassword":"Initial-password-123"}
                     """))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.emailVerificationRequired").value(true))
-            .andReturn()
-            .getResponse()
-            .getContentAsString();
-        String verificationToken = objectMapper.readTree(signupResponse).get("verificationToken").asText();
-
-        mockMvc.perform(get("/api/v1/auth/verify").param("token", verificationToken))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.verified").value(true));
+            .andExpect(jsonPath("$.verificationToken").doesNotExist());
+        // Verification tokens are email-only secrets and must never be returned by the API.
+        jdbcTemplate.update("update auth_user_accounts set status = 'ACTIVE', email_verified_at = now() where email = ?", "signup-api@example.com");
 
         String loginResponse = mockMvc.perform(post("/api/v1/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -229,10 +229,10 @@ class ApiGatewayPostgresIntegrationTest {
     @Test
     void exposesPublicMarketDataAndWebSocketChannel() throws Exception {
         mockMvc.perform(get("/api/v1/markets"))
-            .andExpect(status().isOk());
-        mockMvc.perform(get("/api/v1/markets/BTC-USD/orderbook"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.marketSymbol").value("BTC-USD"));
+            .andExpect(jsonPath("$[0].symbol").value("BTCUSDT"));
+        mockMvc.perform(get("/api/v1/markets/BTCUSDT/orderbook"))
+            .andExpect(status().isServiceUnavailable());
 
         ArrayBlockingQueue<String> messages = new ArrayBlockingQueue<>(1);
         WebSocketSession session = new StandardWebSocketClient()
@@ -241,7 +241,7 @@ class ApiGatewayPostgresIntegrationTest {
                 protected void handleTextMessage(WebSocketSession session, TextMessage message) {
                     messages.offer(message.getPayload());
                 }
-            }, "ws://localhost:" + port + "/ws/markets/BTC-USD/trades")
+            }, "ws://localhost:" + port + "/ws/markets/BTCUSDT/trades")
             .get(5, TimeUnit.SECONDS);
 
         assertThat(session.isOpen()).isTrue();
@@ -298,6 +298,41 @@ class ApiGatewayPostgresIntegrationTest {
                 .header("X-API-Timestamp", timestamp)
                 .header("X-API-Signature", hmac(rawSecret, canonical)))
             .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void globallyRevokesEveryPersistedApiKeyForEmergencyResponse() throws Exception {
+        UUID userId = registerVerifiedUser("emergency-key-user@example.com");
+        ApiKeyService.CreatedApiKey first = apiKeyService.create(
+            userId,
+            "first automation key",
+            java.util.List.of(),
+            java.util.List.of("read"),
+            "test-operator"
+        );
+        ApiKeyService.CreatedApiKey second = apiKeyService.create(
+            userId,
+            "second automation key",
+            java.util.List.of(),
+            java.util.List.of("trade"),
+            "test-operator"
+        );
+
+        int revoked = apiKeyService.revokeAll("emergency-operator");
+
+        assertThat(revoked).isGreaterThanOrEqualTo(2);
+        assertThat(jdbcTemplate.queryForObject(
+            "select count(*) from api_keys where key_id in (?, ?) and revoked_at is null",
+            Integer.class,
+            first.keyId(),
+            second.keyId()
+        )).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+            "select count(*) from api_key_audit_events where key_id in (?, ?) and action = 'REVOKED'",
+            Integer.class,
+            first.keyId(),
+            second.keyId()
+        )).isEqualTo(2);
     }
 
     private String verifyAndLogin(String email) throws Exception {

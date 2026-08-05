@@ -11,6 +11,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestControllerAdvice(basePackages = "com.helium.core.app.api")
 public class ApiExceptionHandler {
@@ -49,6 +50,12 @@ public class ApiExceptionHandler {
             .map(ApiExceptionHandler::fieldMessage)
             .orElse("request validation failed");
         return problem(HttpStatus.BAD_REQUEST, "Validation failed", detail);
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    ResponseEntity<ProblemDetail> responseStatus(ResponseStatusException exception) {
+        HttpStatus status = HttpStatus.valueOf(exception.getStatusCode().value());
+        return problem(status, status.getReasonPhrase(), exception.getReason());
     }
 
     @ExceptionHandler(RuntimeException.class)

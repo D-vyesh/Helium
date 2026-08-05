@@ -119,6 +119,31 @@ public class ApiKeyService {
         audit(keyId, userId, actorId, "REVOKED");
     }
 
+    /**
+     * Emergency-only global revocation. This intentionally operates directly on persisted keys
+     * so every API-key authentication path observes the revoke immediately.
+     */
+    @Transactional
+    public int revokeAll(String actorId) {
+        Instant now = Instant.now(clock);
+        List<RevocableApiKey> activeKeys = jdbcTemplate.query(
+            "select key_id, user_id from api_keys where revoked_at is null for update",
+            (rs, rowNum) -> new RevocableApiKey(rs.getString("key_id"), rs.getObject("user_id", UUID.class))
+        );
+        int revoked = 0;
+        for (RevocableApiKey activeKey : activeKeys) {
+            int updated = jdbcTemplate.update(
+                "update api_keys set revoked_at = ?, updated_at = ? where key_id = ? and revoked_at is null",
+                Timestamp.from(now), Timestamp.from(now), activeKey.keyId()
+            );
+            if (updated == 1) {
+                audit(activeKey.keyId(), activeKey.userId(), actorId, "REVOKED");
+                revoked++;
+            }
+        }
+        return revoked;
+    }
+
     public Optional<ApiKeyAuthentication> authenticate(String presentedKey, String ipAddress) {
         int separator = presentedKey == null ? -1 : presentedKey.indexOf('.');
         if (separator <= 0 || separator == presentedKey.length() - 1) {
@@ -263,4 +288,5 @@ public class ApiKeyService {
         Instant expiresAt, Instant createdAt, Instant revokedAt,
         String secretVersion, String rotatedFromKeyId
     ) {}
+    private record RevocableApiKey(String keyId, UUID userId) {}
 }

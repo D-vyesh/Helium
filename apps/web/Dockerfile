@@ -20,13 +20,15 @@ COPY apps/web ./apps/web
 RUN npm --workspace apps/web run build
 
 FROM node:22-alpine
-WORKDIR /workspace
+WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup -S helium && adduser -S helium -G helium
-COPY --from=build --chown=helium:helium /workspace/package.json /workspace/package-lock.json ./
-COPY --from=build --chown=helium:helium /workspace/apps/web ./apps/web
-COPY --from=build --chown=helium:helium /workspace/node_modules ./node_modules
+# Next's standalone output contains the runtime server and only the production
+# dependencies it needs. It avoids relying on `next start` and a complete
+# monorepo node_modules tree in the final container.
+COPY --from=build --chown=helium:helium /workspace/apps/web/.next/standalone ./
+COPY --from=build --chown=helium:helium /workspace/apps/web/.next/static ./apps/web/.next/static
 USER helium
 EXPOSE 3000
-CMD ["npm", "--workspace", "apps/web", "run", "start"]
+CMD ["node", "apps/web/server.js"]

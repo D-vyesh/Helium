@@ -63,5 +63,10 @@ public class ImmutableAuditLog {
     }
 
     public UUID id() { return id; }
+    public String eventType() { return eventType; }
+    public String actorId() { return actorId; }
+    public String payloadJson() { return payloadJson; }
+    public String previousHash() { return previousHash; }
     public String currentHash() { return currentHash; }
+    public Instant createdAt() { return createdAt; }
 }
