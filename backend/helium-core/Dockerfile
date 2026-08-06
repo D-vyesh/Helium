@@ -1,7 +1,7 @@
-FROM gradle:8.5-jdk21-alpine AS build
+FROM eclipse-temurin:21-jdk-alpine AS build
 WORKDIR /workspace
 COPY backend/helium-core/ .
-RUN gradle --no-daemon :app:bootJar
+RUN chmod +x ./gradlew && ./gradlew --no-daemon :app:bootJar
 
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app

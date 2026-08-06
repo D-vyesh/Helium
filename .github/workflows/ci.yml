@@ -15,6 +15,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+          cache: gradle
       - name: Make gradlew executable
         run: chmod +x ./backend/helium-core/gradlew
       - name: Backend tests
