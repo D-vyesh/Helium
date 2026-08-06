@@ -65,7 +65,8 @@ public class TradingApiController {
             request.type(),
             request.timeInForce(),
             request.quantity(),
-            request.price()
+            request.price(),
+            request.stopPrice()
         ));
         return new OrderResponse(orderId);
     }
@@ -200,7 +201,8 @@ public class TradingApiController {
         @NotNull OrderType type,
         @NotNull TimeInForce timeInForce,
         @DecimalMin(value = "0.000000000000000001") BigDecimal quantity,
-        @DecimalMin(value = "0.000000000000000001") BigDecimal price
+        @DecimalMin(value = "0.000000000000000001") BigDecimal price,
+        @DecimalMin(value = "0.000000000000000001") BigDecimal stopPrice
     ) {}
 
     public record PreviewOrderRequest(
