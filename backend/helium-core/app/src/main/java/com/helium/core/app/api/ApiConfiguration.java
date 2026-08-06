@@ -31,7 +31,7 @@ public class ApiConfiguration {
     @Bean
     CorsFilter corsFilter() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(List.of("http://localhost:*", "https://*.helium.exchange"));
+        configuration.setAllowedOriginPatterns(List.of("http://localhost:*", "https://*.helium.exchange", "https://*.vercel.app", "https://*.onrender.com"));
         configuration.setAllowedMethods(List.of("GET", "POST", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of(
             "Authorization", "Content-Type", "X-Requested-With",
