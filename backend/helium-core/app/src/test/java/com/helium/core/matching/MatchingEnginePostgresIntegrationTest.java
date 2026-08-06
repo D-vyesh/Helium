@@ -295,7 +295,8 @@ class MatchingEnginePostgresIntegrationTest {
             OrderType.LIMIT,
             TimeInForce.GTC,
             new BigDecimal(quantity),
-            new BigDecimal(price)
+            new BigDecimal(price),
+            null
         );
     }
 

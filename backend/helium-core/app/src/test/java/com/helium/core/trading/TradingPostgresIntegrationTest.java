@@ -475,7 +475,8 @@ class TradingPostgresIntegrationTest {
             OrderType.LIMIT,
             TimeInForce.GTC,
             new BigDecimal(quantity),
-            new BigDecimal(price)
+            new BigDecimal(price),
+            null
         );
     }
 
@@ -487,7 +488,8 @@ class TradingPostgresIntegrationTest {
             OrderType.LIMIT,
             TimeInForce.GTC,
             new BigDecimal(quantity),
-            new BigDecimal(price)
+            new BigDecimal(price),
+            null
         );
     }
 
