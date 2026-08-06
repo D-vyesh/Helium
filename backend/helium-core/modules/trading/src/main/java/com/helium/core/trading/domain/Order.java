@@ -53,6 +53,9 @@ public class Order {
     @Column(name = "limit_price", updatable = false, precision = 38, scale = 18)
     private BigDecimal limitPrice;
 
+    @Column(name = "stop_price", updatable = false, precision = 38, scale = 18)
+    private BigDecimal stopPrice;
+
     @Column(name = "fee_rate", nullable = false, updatable = false, precision = 18, scale = 10)
     private BigDecimal feeRate;
 
@@ -91,6 +94,7 @@ public class Order {
         TimeInForce timeInForce,
         BigDecimal quantity,
         BigDecimal limitPrice,
+        BigDecimal stopPrice,
         BigDecimal feeRate,
         String feeAssetCode,
         String feePolicyVersion,
@@ -106,6 +110,7 @@ public class Order {
         this.timeInForce = Objects.requireNonNull(timeInForce, "timeInForce");
         this.quantity = Market.requirePositive(quantity, "quantity");
         this.limitPrice = limitPrice == null ? null : Market.requirePositive(limitPrice, "limitPrice");
+        this.stopPrice = stopPrice == null ? null : Market.requirePositive(stopPrice, "stopPrice");
         this.feeRate = requireRate(feeRate);
         this.feeAssetCode = Market.normalizeAsset(feeAssetCode);
         this.feePolicyVersion = Market.requireText(feePolicyVersion, "feePolicyVersion", 120);
@@ -126,6 +131,7 @@ public class Order {
         TimeInForce timeInForce,
         BigDecimal quantity,
         BigDecimal limitPrice,
+        BigDecimal stopPrice,
         BigDecimal feeRate,
         String feeAssetCode,
         String feePolicyVersion,
@@ -141,6 +147,7 @@ public class Order {
             timeInForce,
             quantity,
             limitPrice,
+            stopPrice,
             feeRate,
             feeAssetCode,
             feePolicyVersion,
@@ -156,27 +163,73 @@ public class Order {
         if (!market.symbol().equals(marketSymbol)) {
             throw new TradingValidationException("order market does not match market");
         }
-        if (orderType == OrderType.LIMIT && limitPrice == null) {
-            throw new TradingValidationException("limit order requires price");
+        switch (orderType) {
+            case LIMIT -> {
+                if (limitPrice == null) {
+                    throw new TradingValidationException("limit order requires price");
+                }
+                validatePriceAndQuantityScale(market);
+                validateMinimums(market, limitPrice);
+            }
+            case MARKET -> {
+                // MARKET orders have no limit price — quantity and notional checks use
+                // a conservative slippage-inclusive price supplied at reservation time.
+                if (quantity.scale() > market.quantityScale()) {
+                    throw new TradingValidationException("quantity increment is invalid for market");
+                }
+                if (quantity.compareTo(market.minOrderQuantity()) < 0) {
+                    throw new TradingValidationException("order quantity is below market minimum");
+                }
+                // MARKET orders must use IOC time-in-force
+                if (timeInForce != TimeInForce.IOC) {
+                    throw new TradingValidationException("market orders must use IOC time-in-force");
+                }
+            }
+            case STOP_LIMIT -> {
+                if (limitPrice == null) {
+                    throw new TradingValidationException("stop-limit order requires a limit price");
+                }
+                if (stopPrice == null) {
+                    throw new TradingValidationException("stop-limit order requires a stop price");
+                }
+                if (stopPrice.compareTo(limitPrice) == 0) {
+                    throw new TradingValidationException("stop price must differ from limit price");
+                }
+                validatePriceAndQuantityScale(market);
+                validateMinimums(market, limitPrice);
+            }
+            case POST_ONLY -> {
+                if (limitPrice == null) {
+                    throw new TradingValidationException("post-only order requires a limit price");
+                }
+                if (timeInForce == TimeInForce.IOC || timeInForce == TimeInForce.FOK) {
+                    throw new TradingValidationException("post-only orders cannot use IOC or FOK time-in-force");
+                }
+                validatePriceAndQuantityScale(market);
+                validateMinimums(market, limitPrice);
+            }
         }
-        if (limitPrice == null) {
-            throw new TradingValidationException("order requires price for reservation");
-        }
-        if (limitPrice.scale() > market.priceScale()) {
+        this.status = OrderStatus.VALIDATED;
+        touch(now);
+    }
+
+    private void validatePriceAndQuantityScale(Market market) {
+        if (limitPrice != null && limitPrice.scale() > market.priceScale()) {
             throw new TradingValidationException("price increment is invalid for market");
         }
         if (quantity.scale() > market.quantityScale()) {
             throw new TradingValidationException("quantity increment is invalid for market");
         }
+    }
+
+    private void validateMinimums(Market market, BigDecimal price) {
         if (quantity.compareTo(market.minOrderQuantity()) < 0) {
             throw new TradingValidationException("order quantity is below market minimum");
         }
-        BigDecimal notional = quantity.multiply(limitPrice).stripTrailingZeros();
+        BigDecimal notional = quantity.multiply(price).stripTrailingZeros();
         if (notional.compareTo(market.minNotional()) < 0) {
             throw new TradingValidationException("order notional is below market minimum");
         }
-        this.status = OrderStatus.VALIDATED;
-        touch(now);
     }
 
     public void markFundsReserved(Instant now) {
@@ -192,9 +245,19 @@ public class Order {
     }
 
     public void accept(long matchingOffset, Instant now) {
+        // STOP_LIMIT orders transition SENT_TO_MATCHING → STOP_PENDING on first acceptance;
+        // when the stop fires the engine sends a second accepted event (the release offset)
+        // and the order transitions STOP_PENDING → OPEN.
+        if (status == OrderStatus.STOP_PENDING) {
+            requireNextMatchingOffset(matchingOffset);
+            this.status = OrderStatus.OPEN;
+            this.lastMatchingOffset = matchingOffset;
+            touch(now);
+            return;
+        }
         requireStatus(OrderStatus.SENT_TO_MATCHING);
         requireNextMatchingOffset(matchingOffset);
-        this.status = OrderStatus.OPEN;
+        this.status = orderType == OrderType.STOP_LIMIT ? OrderStatus.STOP_PENDING : OrderStatus.OPEN;
         this.lastMatchingOffset = matchingOffset;
         touch(now);
     }
@@ -302,6 +365,10 @@ public class Order {
 
     public BigDecimal limitPrice() {
         return limitPrice;
+    }
+
+    public BigDecimal stopPrice() {
+        return stopPrice;
     }
 
     public BigDecimal feeRate() {

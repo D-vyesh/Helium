@@ -25,6 +25,7 @@ class MatchingTradingEventAdapter implements MatchingEventPort {
     private final MatchingExecutionLookupPort matchingExecutionLookupPort;
     private final OrderRepository orderRepository;
     private final MarketRepository marketRepository;
+    private final RiskSurveillanceEngine riskSurveillanceEngine;
 
     MatchingTradingEventAdapter(
         TrustedMatchingActorIssuer matchingActorIssuer,
@@ -34,7 +35,8 @@ class MatchingTradingEventAdapter implements MatchingEventPort {
         TradingSettlementPort tradingSettlementPort,
         MatchingExecutionLookupPort matchingExecutionLookupPort,
         OrderRepository orderRepository,
-        MarketRepository marketRepository
+        MarketRepository marketRepository,
+        RiskSurveillanceEngine riskSurveillanceEngine
     ) {
         this.matchingActorIssuer = matchingActorIssuer;
         this.matchingPermission = matchingPermission;
@@ -44,6 +46,7 @@ class MatchingTradingEventAdapter implements MatchingEventPort {
         this.matchingExecutionLookupPort = matchingExecutionLookupPort;
         this.orderRepository = orderRepository;
         this.marketRepository = marketRepository;
+        this.riskSurveillanceEngine = riskSurveillanceEngine;
     }
 
     @Override
@@ -54,11 +57,20 @@ class MatchingTradingEventAdapter implements MatchingEventPort {
     @Override
     public void orderCancelled(OrderCancelledEvent event) {
         withMatchingActor(() -> orderStatusService.markCancelled(event.orderId(), event.orderOffset()));
+        
+        orderRepository.findById(event.orderId()).ifPresent(order -> {
+            riskSurveillanceEngine.analyzeCancellationForSpoofing(order.id(), order.userId(), order.marketSymbol());
+        });
     }
 
     @Override
     public void orderExpired(OrderExpiredEvent event) {
         withMatchingActor(() -> orderExpirationService.expireOrder(event.orderId(), event.orderOffset()));
+    }
+
+    @Override
+    public void orderRejected(OrderRejectedEvent event) {
+        withMatchingActor(() -> orderStatusService.markRejected(event.orderId(), event.reason(), event.orderOffset()));
     }
 
     @Override
@@ -68,6 +80,12 @@ class MatchingTradingEventAdapter implements MatchingEventPort {
             .orElseThrow(() -> new TradingValidationException("buyer order not found"));
         Order seller = orderRepository.findById(event.sellerOrderId())
             .orElseThrow(() -> new TradingValidationException("seller order not found"));
+            
+        riskSurveillanceEngine.analyzeExecutionForWashTrading(
+            buyer.userId(), seller.userId(), event.marketSymbol(), event.executionId().toString(),
+            event.buyerOrderId(), event.sellerOrderId()
+        );
+
         Market market = marketRepository.findById(event.marketSymbol())
             .orElseThrow(() -> new TradingValidationException("market not found"));
         BigDecimal buyerFee = feeFor(buyer, event.quantity(), event.price(), market);

@@ -93,6 +93,7 @@ class OrderTest {
             TimeInForce.GTC,
             new BigDecimal("1.0"),
             new BigDecimal("50000.0"),
+            null,
             new BigDecimal("0.0010"),
             "USD",
             "test-policy",

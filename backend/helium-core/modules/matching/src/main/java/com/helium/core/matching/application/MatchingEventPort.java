@@ -10,6 +10,8 @@ public interface MatchingEventPort {
 
     void orderExpired(OrderExpiredEvent event);
 
+    void orderRejected(OrderRejectedEvent event);
+
     void executionCreated(ExecutionCreatedEvent event);
 
     record OrderAcceptedEvent(UUID orderId, String marketSymbol, long marketSequence, long orderOffset) {
@@ -19,6 +21,14 @@ public interface MatchingEventPort {
     }
 
     record OrderExpiredEvent(UUID orderId, String marketSymbol, long marketSequence, long orderOffset) {
+    }
+
+    /**
+     * Emitted when the matching engine rejects an order without filling it.
+     * Used for POST_ONLY orders that would immediately cross and for any other
+     * engine-level rejection reasons.
+     */
+    record OrderRejectedEvent(UUID orderId, String marketSymbol, String reason, long marketSequence, long orderOffset) {
     }
 
     record ExecutionCreatedEvent(

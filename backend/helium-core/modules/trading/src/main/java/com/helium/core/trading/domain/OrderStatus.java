@@ -5,13 +5,15 @@ public enum OrderStatus {
     VALIDATED,
     FUNDS_RESERVED,
     SENT_TO_MATCHING,
+    STOP_PENDING,
     OPEN,
     PARTIALLY_FILLED,
     FILLED,
     CANCEL_REQUESTED,
     CANCELLED,
     EXPIRED,
-    REJECTED;
+    REJECTED,
+    SUSPICIOUS;
 
     public boolean terminal() {
         return this == FILLED || this == CANCELLED || this == EXPIRED || this == REJECTED;

@@ -21,7 +21,8 @@ final class TradingHash {
         OrderType type,
         BigDecimal quantity,
         BigDecimal price,
-        TimeInForce timeInForce
+        TimeInForce timeInForce,
+        BigDecimal stopPrice
     ) {
         return hash(
             part(userId.toString())
@@ -29,8 +30,9 @@ final class TradingHash {
                 + part(side.name())
                 + part(type.name())
                 + part(canonical(quantity))
-                + part(canonical(price))
+                + part(price == null ? "null" : canonical(price))
                 + part(timeInForce.name())
+                + part(stopPrice == null ? "null" : canonical(stopPrice))
         );
     }
 

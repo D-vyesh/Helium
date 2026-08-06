@@ -7,6 +7,10 @@ public interface MatchingCommandPort {
     void submitOrder(SubmitOrderCommand command);
     void cancelOrder(CancelOrderCommand command);
     void expireOrder(ExpireOrderCommand command);
+    
+    void haltMarket(HaltMarketCommand command);
+    void startAuction(StartAuctionCommand command);
+    void uncrossAndResume(ResumeMarketCommand command);
 
     record SubmitOrderCommand(
         UUID orderId,
@@ -15,7 +19,8 @@ public interface MatchingCommandPort {
         String orderType,
         String timeInForce,
         BigDecimal quantity,
-        BigDecimal limitPrice
+        BigDecimal limitPrice,
+        BigDecimal stopPrice   // null for LIMIT / MARKET / POST_ONLY
     ) {}
 
     record CancelOrderCommand(
@@ -25,6 +30,18 @@ public interface MatchingCommandPort {
 
     record ExpireOrderCommand(
         UUID orderId,
+        String marketSymbol
+    ) {}
+
+    record HaltMarketCommand(
+        String marketSymbol
+    ) {}
+
+    record StartAuctionCommand(
+        String marketSymbol
+    ) {}
+
+    record ResumeMarketCommand(
         String marketSymbol
     ) {}
 }

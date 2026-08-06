@@ -39,6 +39,11 @@ class MatchingMarketDataEventAdapter implements MatchingEventPort {
     }
 
     @Override
+    public void orderRejected(OrderRejectedEvent event) {
+        projectSnapshot(event.marketSymbol(), event.marketSequence());
+    }
+
+    @Override
     public void executionCreated(ExecutionCreatedEvent event) {
         try {
             marketDataEventPort.executionCreated(new MarketDataEventPort.ExecutionCreated(

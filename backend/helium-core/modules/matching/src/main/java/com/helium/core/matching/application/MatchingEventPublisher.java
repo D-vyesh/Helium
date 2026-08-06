@@ -25,6 +25,10 @@ class MatchingEventPublisher {
         publishAfterCommit(() -> eventPorts.forEach(port -> port.orderExpired(event)));
     }
 
+    void orderRejected(MatchingEventPort.OrderRejectedEvent event) {
+        publishAfterCommit(() -> eventPorts.forEach(port -> port.orderRejected(event)));
+    }
+
     void executionCreated(MatchingEventPort.ExecutionCreatedEvent event) {
         publishAfterCommit(() -> eventPorts.forEach(port -> port.executionCreated(event)));
     }

@@ -17,6 +17,10 @@ class NoOpMatchingEventPort implements MatchingEventPort {
     }
 
     @Override
+    public void orderRejected(OrderRejectedEvent event) {
+    }
+
+    @Override
     public void executionCreated(ExecutionCreatedEvent event) {
     }
 }

@@ -35,6 +35,17 @@ class OrderBookTest {
     }
 
     @Test
+    void marketOrderCrossesAnyRestingOrder() {
+        BookOrder marketBuy = BookOrder.accept(
+            UUID.randomUUID(), "0".repeat(64), "BTC-USD", MatchingOrderSide.BUY, MatchingOrderType.MARKET,
+            new BigDecimal("1.0"), new BigDecimal("999999999999999999"), 1, Instant.now()
+        );
+        BookOrder highAsk = order(MatchingOrderSide.SELL, "1000000.00", 2);
+
+        assertThat(marketBuy.crosses(highAsk)).isTrue();
+    }
+
+    @Test
     void appliesPartialAndFullFillsWithoutNegativeQuantity() {
         BookOrder order = order(MatchingOrderSide.BUY, "100.00", 1);
 

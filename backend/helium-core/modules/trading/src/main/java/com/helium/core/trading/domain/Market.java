@@ -6,6 +6,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalTime;
 import java.util.Locale;
 import java.util.Objects;
 
@@ -40,6 +41,12 @@ public class Market {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @Column(name = "last_reference_price", precision = 38, scale = 18)
+    private BigDecimal lastReferencePrice;
+
+    @Column(name = "day_close_time_utc")
+    private LocalTime dayCloseTimeUtc;
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
@@ -70,6 +77,8 @@ public class Market {
         this.enabled = enabled;
         this.createdAt = Objects.requireNonNull(now, "now");
         this.updatedAt = now;
+        this.lastReferencePrice = null;
+        this.dayCloseTimeUtc = LocalTime.of(23, 59, 59);
     }
 
     public static Market register(
@@ -88,6 +97,11 @@ public class Market {
 
     public void updatePolicy(boolean enabled, Instant now) {
         this.enabled = enabled;
+        this.updatedAt = Objects.requireNonNull(now, "now");
+    }
+
+    public void updateReferencePrice(BigDecimal newPrice, Instant now) {
+        this.lastReferencePrice = newPrice;
         this.updatedAt = Objects.requireNonNull(now, "now");
     }
 
@@ -121,6 +135,18 @@ public class Market {
 
     public boolean enabled() {
         return enabled;
+    }
+
+    public Instant updatedAt() {
+        return updatedAt;
+    }
+
+    public BigDecimal lastReferencePrice() {
+        return lastReferencePrice;
+    }
+
+    public LocalTime dayCloseTimeUtc() {
+        return dayCloseTimeUtc != null ? dayCloseTimeUtc : LocalTime.of(23, 59, 59);
     }
 
     public static String normalizeSymbol(String value) {

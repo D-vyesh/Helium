@@ -1,6 +1,7 @@
 package com.helium.core.matching.domain;
 
 public enum MatchingOrderStatus {
+    STOP_PENDING,
     ACTIVE,
     PARTIALLY_FILLED,
     FILLED,

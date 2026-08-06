@@ -21,4 +21,19 @@ public class NoOpMatchingCommandPortAdapter implements MatchingCommandPort {
     public void expireOrder(ExpireOrderCommand command) {
         // No-op
     }
+
+    @Override
+    public void haltMarket(HaltMarketCommand command) {
+        // No-op
+    }
+
+    @Override
+    public void startAuction(StartAuctionCommand command) {
+        // No-op
+    }
+
+    @Override
+    public void uncrossAndResume(ResumeMarketCommand command) {
+        // No-op
+    }
 }

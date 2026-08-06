@@ -51,4 +51,26 @@ public class MarketMatchingState {
     public boolean active() {
         return status == MarketMatchingStatus.ACTIVE;
     }
+
+    public MarketMatchingStatus status() {
+        return status;
+    }
+
+    public void halt(Instant now) {
+        if (this.status == MarketMatchingStatus.HALTED) return;
+        this.status = MarketMatchingStatus.HALTED;
+        this.updatedAt = Objects.requireNonNull(now, "now");
+    }
+
+    public void startAuction(Instant now) {
+        if (this.status == MarketMatchingStatus.AUCTION) return;
+        this.status = MarketMatchingStatus.AUCTION;
+        this.updatedAt = Objects.requireNonNull(now, "now");
+    }
+
+    public void resume(Instant now) {
+        if (this.status == MarketMatchingStatus.ACTIVE) return;
+        this.status = MarketMatchingStatus.ACTIVE;
+        this.updatedAt = Objects.requireNonNull(now, "now");
+    }
 }

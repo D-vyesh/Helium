@@ -19,7 +19,8 @@ final class MatchingHash {
         MatchingOrderSide side,
         MatchingOrderType orderType,
         BigDecimal quantity,
-        BigDecimal limitPrice
+        BigDecimal limitPrice,
+        BigDecimal stopPrice
     ) {
         return hash(
             part(orderId.toString())
@@ -28,6 +29,7 @@ final class MatchingHash {
                 + part(orderType.name())
                 + part(canonical(quantity))
                 + part(canonical(limitPrice))
+                + part(stopPrice == null ? "null" : canonical(stopPrice))
         );
     }
 

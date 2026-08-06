@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 import com.helium.core.matching.domain.BookOrder;
 import com.helium.core.matching.domain.Execution;
 import com.helium.core.matching.domain.MatchingOrderSide;
+import com.helium.core.matching.domain.MatchingOrderStatus;
 import com.helium.core.matching.domain.MatchingOrderType;
 import com.helium.core.matching.domain.MatchingValidationException;
 import com.helium.core.matching.infrastructure.BookOrderRepository;
@@ -67,30 +68,69 @@ class SubmitOrderServiceTest {
     }
 
     @Test
-    void partiallyFillsRestingOrderAndLeavesRemainingTakerOnBook() {
+    void marketOrderSweepsBestPriceAndCancelsUnfilledRemainder() {
         UUID takerId = UUID.randomUUID();
         BookOrder ask = resting(UUID.randomUUID(), MatchingOrderSide.SELL, "100.00", 1);
-        ask.fill(new BigDecimal("0.6"), clock.instant());
+        when(orderRepository.findByIdForUpdate(takerId)).thenReturn(Optional.empty());
+        when(orderRepository.findMatchableForUpdate("BTC-USD", MatchingOrderSide.SELL)).thenReturn(List.of(ask));
+        when(sequenceService.next("BTC-USD")).thenReturn(2L, 3L, 4L);
+
+        service.submit(market(takerId, "BUY", "2.0"));
+
+        ArgumentCaptor<Execution> execution = ArgumentCaptor.forClass(Execution.class);
+        verify(executionRepository).save(execution.capture());
+        assertThat(execution.getValue().quantity()).isEqualByComparingTo("1.0");
+
+        verify(eventPublisher).orderCancelled(any());
+    }
+
+    @Test
+    void postOnlyOrderIsRejectedWhenItWouldCross() {
+        UUID takerId = UUID.randomUUID();
+        BookOrder ask = resting(UUID.randomUUID(), MatchingOrderSide.SELL, "100.00", 1);
         when(orderRepository.findByIdForUpdate(takerId)).thenReturn(Optional.empty());
         when(orderRepository.findMatchableForUpdate("BTC-USD", MatchingOrderSide.SELL)).thenReturn(List.of(ask));
         when(sequenceService.next("BTC-USD")).thenReturn(2L, 3L);
 
-        service.submit(limit(takerId, "BUY", "1.0", "100.00"));
+        service.submit(postOnly(takerId, "BUY", "1.0", "100.00"));
+
+        verify(executionRepository, never()).save(any());
+        verify(eventPublisher).orderRejected(any());
+    }
+
+    @Test
+    void postOnlyOrderRestsWhenItDoesNotCross() {
+        UUID takerId = UUID.randomUUID();
+        BookOrder ask = resting(UUID.randomUUID(), MatchingOrderSide.SELL, "100.00", 1);
+        when(orderRepository.findByIdForUpdate(takerId)).thenReturn(Optional.empty());
+        when(orderRepository.findMatchableForUpdate("BTC-USD", MatchingOrderSide.SELL)).thenReturn(List.of(ask));
+        when(sequenceService.next("BTC-USD")).thenReturn(2L);
+
+        service.submit(postOnly(takerId, "BUY", "1.0", "99.00"));
+
+        verify(executionRepository, never()).save(any());
+        verify(eventPublisher, never()).orderRejected(any());
+        verify(eventPublisher).orderAccepted(any());
+    }
+
+    @Test
+    void stopLimitOrderRestsInStopPendingStatusUntilTriggered() {
+        UUID stopOrderId = UUID.randomUUID();
+        when(orderRepository.findByIdForUpdate(stopOrderId)).thenReturn(Optional.empty());
+        when(sequenceService.next("BTC-USD")).thenReturn(1L);
+
+        service.submit(stopLimit(stopOrderId, "SELL", "1.0", "95.00", "96.00"));
 
         ArgumentCaptor<BookOrder> savedOrders = ArgumentCaptor.forClass(BookOrder.class);
-        verify(orderRepository, org.mockito.Mockito.atLeastOnce()).save(savedOrders.capture());
-        BookOrder taker = savedOrders.getAllValues().stream()
-            .filter(order -> order.orderId().equals(takerId))
-            .reduce((first, second) -> second)
-            .orElseThrow();
-        assertThat(taker.remainingQuantity()).isEqualByComparingTo("0.6");
-        assertThat(ask.remainingQuantity()).isEqualByComparingTo("0");
+        verify(orderRepository).save(savedOrders.capture());
+        assertThat(savedOrders.getValue().status()).isEqualTo(MatchingOrderStatus.STOP_PENDING);
+        assertThat(savedOrders.getValue().stopPrice()).isEqualByComparingTo("96.00");
     }
 
     @Test
     void duplicateSubmissionWithSamePayloadIsSafeReplay() {
         UUID orderId = UUID.randomUUID();
-        String hash = MatchingHash.submissionHash(orderId, "BTC-USD", MatchingOrderSide.BUY, MatchingOrderType.LIMIT, new BigDecimal("1.0"), new BigDecimal("100.00"));
+        String hash = MatchingHash.submissionHash(orderId, "BTC-USD", MatchingOrderSide.BUY, MatchingOrderType.LIMIT, new BigDecimal("1.0"), new BigDecimal("100.00"), null);
         BookOrder existing = BookOrder.accept(orderId, hash, "BTC-USD", MatchingOrderSide.BUY, MatchingOrderType.LIMIT, new BigDecimal("1.0"), new BigDecimal("100.00"), 1, clock.instant());
         when(orderRepository.findByIdForUpdate(orderId)).thenReturn(Optional.of(existing));
 
@@ -103,7 +143,7 @@ class SubmitOrderServiceTest {
     @Test
     void duplicateSubmissionWithDifferentPayloadFailsClosed() {
         UUID orderId = UUID.randomUUID();
-        String hash = MatchingHash.submissionHash(orderId, "BTC-USD", MatchingOrderSide.BUY, MatchingOrderType.LIMIT, new BigDecimal("1.0"), new BigDecimal("100.00"));
+        String hash = MatchingHash.submissionHash(orderId, "BTC-USD", MatchingOrderSide.BUY, MatchingOrderType.LIMIT, new BigDecimal("1.0"), new BigDecimal("100.00"), null);
         BookOrder existing = BookOrder.accept(orderId, hash, "BTC-USD", MatchingOrderSide.BUY, MatchingOrderType.LIMIT, new BigDecimal("1.0"), new BigDecimal("100.00"), 1, clock.instant());
         when(orderRepository.findByIdForUpdate(orderId)).thenReturn(Optional.of(existing));
 
@@ -134,7 +174,47 @@ class SubmitOrderServiceTest {
             "LIMIT",
             "GTC",
             new BigDecimal(quantity),
-            new BigDecimal(price)
+            new BigDecimal(price),
+            null
+        );
+    }
+
+    private static MatchingCommandPort.SubmitOrderCommand market(UUID orderId, String side, String quantity) {
+        return new MatchingCommandPort.SubmitOrderCommand(
+            orderId,
+            "BTC-USD",
+            side,
+            "MARKET",
+            "IOC",
+            new BigDecimal(quantity),
+            null,
+            null
+        );
+    }
+
+    private static MatchingCommandPort.SubmitOrderCommand postOnly(UUID orderId, String side, String quantity, String price) {
+        return new MatchingCommandPort.SubmitOrderCommand(
+            orderId,
+            "BTC-USD",
+            side,
+            "POST_ONLY",
+            "GTC",
+            new BigDecimal(quantity),
+            new BigDecimal(price),
+            null
+        );
+    }
+
+    private static MatchingCommandPort.SubmitOrderCommand stopLimit(UUID orderId, String side, String quantity, String limitPrice, String stopPrice) {
+        return new MatchingCommandPort.SubmitOrderCommand(
+            orderId,
+            "BTC-USD",
+            side,
+            "STOP_LIMIT",
+            "GTC",
+            new BigDecimal(quantity),
+            new BigDecimal(limitPrice),
+            new BigDecimal(stopPrice)
         );
     }
 

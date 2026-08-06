@@ -16,6 +16,7 @@ public interface OrderPlacementPort {
         OrderType orderType,
         TimeInForce timeInForce,
         BigDecimal quantity,
-        BigDecimal limitPrice
+        BigDecimal limitPrice,
+        BigDecimal stopPrice
     ) {}
 }

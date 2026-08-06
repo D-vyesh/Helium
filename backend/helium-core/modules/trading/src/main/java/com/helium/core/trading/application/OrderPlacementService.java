@@ -41,6 +41,7 @@ class OrderPlacementService implements OrderPlacementPort {
     private final TradingAuditPublisher auditPublisher;
     private final TradingSecurityContext securityContext;
     private final TradingAdvisoryLockService lockService;
+    private final RiskSurveillanceEngine riskSurveillanceEngine;
     private final Clock clock;
 
     OrderPlacementService(
@@ -56,6 +57,7 @@ class OrderPlacementService implements OrderPlacementPort {
         TradingAuditPublisher auditPublisher,
         TradingSecurityContext securityContext,
         TradingAdvisoryLockService lockService,
+        RiskSurveillanceEngine riskSurveillanceEngine,
         Clock clock
     ) {
         this.orderRepository = orderRepository;
@@ -70,6 +72,7 @@ class OrderPlacementService implements OrderPlacementPort {
         this.auditPublisher = auditPublisher;
         this.securityContext = securityContext;
         this.lockService = lockService;
+        this.riskSurveillanceEngine = riskSurveillanceEngine;
         this.clock = clock;
     }
 
@@ -91,7 +94,8 @@ class OrderPlacementService implements OrderPlacementPort {
             command.orderType(),
             command.quantity(),
             command.limitPrice(),
-            command.timeInForce()
+            command.timeInForce(),
+            command.stopPrice()
         );
 
         var existingOrderOpt = orderRepository.findByUserIdAndClientOrderId(userId, command.clientOrderId());
@@ -106,7 +110,8 @@ class OrderPlacementService implements OrderPlacementPort {
         Market market = marketRepository.findById(command.marketSymbol())
             .orElseThrow(() -> new TradingValidationException("market not found"));
 
-        FeeEstimate estimatedFee = feeService.estimate(market, command.side(), command.quantity(), command.limitPrice());
+        BigDecimal feeCalcPrice = command.limitPrice() != null ? command.limitPrice() : BigDecimal.ONE;
+        FeeEstimate estimatedFee = feeService.estimate(market, command.side(), command.quantity(), feeCalcPrice);
 
         Order order = Order.receive(
             userId,
@@ -118,6 +123,7 @@ class OrderPlacementService implements OrderPlacementPort {
             command.timeInForce(),
             command.quantity(),
             command.limitPrice(),
+            command.stopPrice(),
             estimatedFee.rate(),
             estimatedFee.assetCode(),
             estimatedFee.policyVersion(),
@@ -131,6 +137,9 @@ class OrderPlacementService implements OrderPlacementPort {
 
         if (order.side() == OrderSide.BUY) {
             assetCode = market.quoteAsset();
+            if (order.limitPrice() == null) {
+                throw new TradingValidationException("market buy order requires limitPrice or max price for funds reservation");
+            }
             BigDecimal notional = order.quantity().multiply(order.limitPrice());
             reserveAmount = notional.add(estimatedFee.amount());
         } else {
@@ -167,6 +176,7 @@ class OrderPlacementService implements OrderPlacementPort {
         reservationRepository.save(reservation);
 
         auditPublisher.publish(order.id(), order.status(), order.userId().toString(), "Order placed");
+        riskSurveillanceEngine.recordOrderCreation(order.id());
 
         MatchingCommandPort matchingCommandPort = matchingCommandPortProvider.getIfAvailable();
         if (matchingCommandPort != null) {
@@ -177,7 +187,8 @@ class OrderPlacementService implements OrderPlacementPort {
                 order.orderType().name(),
                 order.timeInForce().name(),
                 order.quantity(),
-                order.limitPrice()
+                order.limitPrice(),
+                order.stopPrice()
             )));
         }
 

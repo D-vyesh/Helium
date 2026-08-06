@@ -1,5 +1,8 @@
 package com.helium.core.matching.domain;
 
 public enum MatchingOrderType {
-    LIMIT
+    LIMIT,
+    MARKET,
+    STOP_LIMIT,
+    POST_ONLY
 }

@@ -18,4 +18,13 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select tradingOrder from Order tradingOrder where tradingOrder.id = :id")
     Optional<Order> findByIdForUpdate(@Param("id") UUID id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+        select tradingOrder from Order tradingOrder
+        where tradingOrder.marketSymbol = :marketSymbol
+          and tradingOrder.timeInForce = 'DAY'
+          and tradingOrder.status in ('OPEN', 'PARTIALLY_FILLED')
+        """)
+    List<Order> findOpenDayOrdersForUpdate(@Param("marketSymbol") String marketSymbol);
 }

@@ -27,10 +27,11 @@ class OrderPreviewService implements OrderPreviewPort {
         Market market = marketRepository.findById(Market.normalizeSymbol(command.marketSymbol()))
             .orElseThrow(() -> new TradingValidationException("market not found"));
         BigDecimal quantity = Market.requirePositive(command.quantity(), "quantity");
-        BigDecimal limitPrice = Market.requirePositive(command.limitPrice(), "limitPrice");
+        BigDecimal limitPrice = command.limitPrice() != null ? Market.requirePositive(command.limitPrice(), "limitPrice") : null;
         validate(command, market, quantity, limitPrice);
-        FeeEstimate fee = feeService.estimate(market, command.side(), quantity, limitPrice);
-        BigDecimal notional = quantity.multiply(limitPrice).stripTrailingZeros();
+        BigDecimal effectivePrice = limitPrice != null ? limitPrice : BigDecimal.ONE;
+        FeeEstimate fee = feeService.estimate(market, command.side(), quantity, effectivePrice);
+        BigDecimal notional = limitPrice != null ? quantity.multiply(limitPrice).stripTrailingZeros() : BigDecimal.ZERO;
         String reserveAsset;
         BigDecimal reserveAmount;
         if (command.side() == OrderSide.BUY) {
@@ -61,7 +62,7 @@ class OrderPreviewService implements OrderPreviewPort {
             market.minNotional(),
             market.priceScale(),
             market.quantityScale(),
-            List.of(OrderType.LIMIT)
+            List.of(OrderType.LIMIT, OrderType.MARKET, OrderType.STOP_LIMIT, OrderType.POST_ONLY)
         );
     }
 
@@ -69,21 +70,20 @@ class OrderPreviewService implements OrderPreviewPort {
         if (!market.enabled()) {
             throw new TradingValidationException("market is disabled");
         }
-        if (command.orderType() != OrderType.LIMIT) {
-            throw new TradingValidationException("only limit orders are supported");
-        }
-        if (limitPrice.scale() > market.priceScale()) {
-            throw new TradingValidationException("price increment is invalid for market");
+        if (limitPrice != null) {
+            if (limitPrice.scale() > market.priceScale()) {
+                throw new TradingValidationException("price increment is invalid for market");
+            }
+            BigDecimal notional = quantity.multiply(limitPrice).stripTrailingZeros();
+            if (notional.compareTo(market.minNotional()) < 0) {
+                throw new TradingValidationException("order notional is below market minimum");
+            }
         }
         if (quantity.scale() > market.quantityScale()) {
             throw new TradingValidationException("quantity increment is invalid for market");
         }
         if (quantity.compareTo(market.minOrderQuantity()) < 0) {
             throw new TradingValidationException("order quantity is below market minimum");
-        }
-        BigDecimal notional = quantity.multiply(limitPrice).stripTrailingZeros();
-        if (notional.compareTo(market.minNotional()) < 0) {
-            throw new TradingValidationException("order notional is below market minimum");
         }
     }
 }

@@ -3,8 +3,11 @@ package com.helium.core.trading.application;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
+import com.helium.core.outbox.application.OutboxPublisher;
+import com.helium.core.trading.domain.OrderStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -13,19 +16,32 @@ public class RiskSurveillanceEngine {
 
     // Track order creation timestamps for Spoofing detection
     private final Map<UUID, Long> orderCreationTimes = new ConcurrentHashMap<>();
+    private final OutboxPublisher outboxPublisher;
+    private final TradingAuditPublisher auditPublisher;
+
+    public RiskSurveillanceEngine(OutboxPublisher outboxPublisher, TradingAuditPublisher auditPublisher) {
+        this.outboxPublisher = outboxPublisher;
+        this.auditPublisher = auditPublisher;
+    }
 
     public void recordOrderCreation(UUID orderId) {
         orderCreationTimes.put(orderId, System.currentTimeMillis());
     }
 
-    public void analyzeExecutionForWashTrading(UUID makerId, UUID takerId, String marketId, String tradeId) {
+    public void analyzeExecutionForWashTrading(UUID makerId, UUID takerId, String marketId, String tradeId, UUID makerOrderId, UUID takerOrderId) {
         if (makerId.equals(takerId)) {
             log.error("RISK ALERT: Wash Trading Detected! User {} matched against their own order in market {}. Trade ID: {}", 
                 makerId, marketId, tradeId);
-            // In a real system, we would:
-            // 1. Emit an event to suspend the account
-            // 2. Alert the COMPLIANCE_OFFICER
-            // 3. Mark the trade as suspicious in the DB
+                
+            outboxPublisher.publish(
+                "RISK", 
+                makerId.toString(), 
+                "TRADING.RISK_ALERT", 
+                "{\"type\":\"WASH_TRADING\", \"userId\":\"" + makerId + "\", \"marketId\":\"" + marketId + "\", \"tradeId\":\"" + tradeId + "\"}"
+            );
+            
+            auditPublisher.publish(makerOrderId, OrderStatus.SUSPICIOUS, "SYSTEM_RISK", "Wash trading detected. Trade ID: " + tradeId);
+            auditPublisher.publish(takerOrderId, OrderStatus.SUSPICIOUS, "SYSTEM_RISK", "Wash trading detected. Trade ID: " + tradeId);
         }
     }
 
@@ -37,7 +53,15 @@ public class RiskSurveillanceEngine {
             if (lifetime < 50) {
                 log.warn("RISK ALERT: Potential Spoofing Detected. Order {} in market {} by user {} cancelled after {}ms", 
                     orderId, marketId, userId, lifetime);
-                // In a real system: increment spoofing counter for user, flag if pattern persists
+                
+                outboxPublisher.publish(
+                    "RISK", 
+                    userId.toString(), 
+                    "TRADING.RISK_ALERT", 
+                    "{\"type\":\"SPOOFING\", \"userId\":\"" + userId + "\", \"marketId\":\"" + marketId + "\", \"orderId\":\"" + orderId + "\"}"
+                );
+                
+                auditPublisher.publish(orderId, OrderStatus.SUSPICIOUS, "SYSTEM_RISK", "Potential spoofing detected. Lifetime: " + lifetime + "ms");
             }
         }
     }
@@ -56,5 +80,11 @@ public class RiskSurveillanceEngine {
             log.error("SURVEILLANCE ALERT: Unusual high volume ({} USD) detected for user {} on asset {}. Flagging for insider trading review.", 
                 volumeUsd, userId, assetCode);
         }
+    }
+
+    @Scheduled(fixedRate = 3600000)
+    public void flushOrderCreationTimes() {
+        log.info("RiskSurveillanceEngine: Flushing {} order creation times from memory to prevent leaks", orderCreationTimes.size());
+        orderCreationTimes.clear();
     }
 }

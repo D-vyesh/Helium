@@ -36,10 +36,21 @@ public class AccountAdministrationService implements AccountAdministrationPort {
     @Transactional
     public void suspend(UUID userId, SecurityContextData securityContext) {
         requireAdministratorOtherThan(userId);
+        doSuspend(userId, "account suspended", securityContext);
+    }
+
+    @Override
+    @Transactional
+    public void suspendBySystem(UUID userId, String reason) {
+        // System suspensions bypass the administrator check and do not provide a user security context
+        doSuspend(userId, reason, null);
+    }
+
+    private void doSuspend(UUID userId, String reason, SecurityContextData securityContext) {
         UserAccount account = accountForUpdate(userId);
         account.suspend(clock.instant());
-        sessionService.revokeActiveSessions(userId, "account suspended", securityContext);
-        auditService.record(SecurityAuditEventType.ACCOUNT_SUSPENDED, userId, null, securityContext, "account suspended");
+        sessionService.revokeActiveSessions(userId, reason, securityContext);
+        auditService.record(SecurityAuditEventType.ACCOUNT_SUSPENDED, userId, null, securityContext, reason);
     }
 
     @Override
