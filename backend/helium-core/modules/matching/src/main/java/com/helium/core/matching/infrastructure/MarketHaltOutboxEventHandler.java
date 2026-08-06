@@ -10,13 +10,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
-public class MatchingOutboxEventHandler implements OutboxEventHandler {
-    private static final Logger log = LoggerFactory.getLogger(MatchingOutboxEventHandler.class);
+public class MarketHaltOutboxEventHandler implements OutboxEventHandler {
+    private static final Logger log = LoggerFactory.getLogger(MarketHaltOutboxEventHandler.class);
 
     private final ObjectMapper objectMapper;
     private final MatchingCommandPort matchingCommandPort;
 
-    public MatchingOutboxEventHandler(ObjectMapper objectMapper, MatchingCommandPort matchingCommandPort) {
+    public MarketHaltOutboxEventHandler(ObjectMapper objectMapper, MatchingCommandPort matchingCommandPort) {
         this.objectMapper = objectMapper;
         this.matchingCommandPort = matchingCommandPort;
     }
