@@ -15,6 +15,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-jdbc")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework:spring-context")
+    implementation("com.fasterxml.jackson.core:jackson-databind")
     testImplementation(project(":shared:test-support"))
     testImplementation("org.springframework.boot:spring-boot-starter-test")
 }

@@ -22,4 +22,6 @@ public interface EmailService {
         String amount,
         String destinationAddress
     );
+
+    void sendGovernanceNotificationEmail(String toEmail, String displayName, String requestType, String requestId);
 }

@@ -16,4 +16,6 @@ public interface RoleGrantRepository extends JpaRepository<RoleGrant, UUID> {
     Optional<RoleGrant> findByUserIdAndRoleAndRevokedAtIsNull(UUID userId, Role role);
 
     boolean existsByUserIdAndRoleAndRevokedAtIsNull(UUID userId, Role role);
+
+    List<RoleGrant> findAllByRoleAndRevokedAtIsNull(Role role);
 }

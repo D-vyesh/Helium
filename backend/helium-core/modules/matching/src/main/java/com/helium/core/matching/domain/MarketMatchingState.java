@@ -56,6 +56,14 @@ public class MarketMatchingState {
         return status;
     }
 
+    public String marketSymbol() {
+        return marketSymbol;
+    }
+
+    public Instant updatedAt() {
+        return updatedAt;
+    }
+
     public void halt(Instant now) {
         if (this.status == MarketMatchingStatus.HALTED) return;
         this.status = MarketMatchingStatus.HALTED;

@@ -44,6 +44,10 @@ public class CapturingEmailService implements EmailService {
         WITHDRAWAL_CONFIRMATION_TOKENS.put(normalize(toEmail), tokenFrom(confirmationUrl));
     }
 
+    @Override
+    public void sendGovernanceNotificationEmail(String toEmail, String displayName, String requestType, String requestId) {
+    }
+
     public static String verificationToken(String email) {
         return requireToken(VERIFICATION_TOKENS, email);
     }

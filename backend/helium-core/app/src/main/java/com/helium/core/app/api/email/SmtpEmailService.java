@@ -97,6 +97,20 @@ public class SmtpEmailService implements EmailService {
         );
     }
 
+    @Override
+    @Async
+    public void sendGovernanceNotificationEmail(String toEmail, String displayName, String requestType, String requestId) {
+        if (!props.enabled()) {
+            log.info("[EMAIL-DISABLED] Governance notification to {} requestType={} requestId={}", toEmail, requestType, requestId);
+            return;
+        }
+        send(
+            toEmail,
+            "HELIUM Governance Action Required: " + requestType,
+            "<p>Hello " + displayName + ",</p><p>A new governance request of type <b>" + requestType + "</b> (ID: " + requestId + ") requires your approval.</p>"
+        );
+    }
+
     private void send(String to, String subject, String htmlBody) {
         try {
             MimeMessage message = mailSender.createMimeMessage();
