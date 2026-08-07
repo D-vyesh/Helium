@@ -54,9 +54,39 @@ public class RegistrationTransactionService {
         SecurityContextData securityContext
     ) {
         Instant now = clock.instant();
-        if (userAccountRepository.findByEmailForUpdate(email).isPresent()) {
-            throw new AuthValidationException("email is already registered");
+        java.util.Optional<UserAccount> existing = userAccountRepository.findByEmailForUpdate(email);
+        
+        if (existing.isPresent()) {
+            UserAccount account = existing.get();
+            if (account.status() == com.helium.core.authuser.domain.UserAccountStatus.EMAIL_UNVERIFIED) {
+                // Invalidate any unconsumed tokens
+                for (EmailVerificationToken token : verificationTokenRepository.findAllByUserIdAndConsumedAtIsNull(account.id())) {
+                    token.invalidate(now);
+                    verificationTokenRepository.save(token);
+                }
+                
+                // Update password
+                Credential credential = credentialRepository.findByUserId(account.id())
+                    .orElseThrow(() -> new IllegalStateException("Missing credential for user"));
+                credential.changePassword(passwordHash, now);
+                credentialRepository.save(credential);
+                
+                // Issue new token
+                verificationTokenRepository.save(EmailVerificationToken.issue(
+                    account.id(),
+                    verificationTokenHash,
+                    VERIFICATION_TOKEN_LIFETIME,
+                    now
+                ));
+                
+                auditService.record(SecurityAuditEventType.AUTH_SIGNUP, account.id(), null, securityContext, "user re-registered (unverified)");
+                auditService.record(SecurityAuditEventType.EMAIL_VERIFICATION_ISSUED, account.id(), null, securityContext, "email verification token re-issued");
+                return account.id();
+            } else {
+                throw new AuthValidationException("email is already registered");
+            }
         }
+
         UserAccount account = UserAccount.register(email, displayName, now);
         userAccountRepository.saveAndFlush(account);
         credentialRepository.save(Credential.create(account.id(), passwordHash, now));
