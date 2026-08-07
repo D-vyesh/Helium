@@ -307,7 +307,7 @@ class AuthUserPostgresIntegrationTest {
 
     @Test
     void duplicateEmailIsRejectedAndDatabaseMutationOfAuditEventsIsBlocked() {
-        RegistrationResult user = register("duplicate@example.com");
+        RegistrationResult user = registerAndVerify("duplicate@example.com");
 
         assertThatThrownBy(() -> register("DUPLICATE@example.com"))
             .isInstanceOf(AuthValidationException.class)
