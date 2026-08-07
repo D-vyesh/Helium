@@ -35,10 +35,10 @@ public class ProductionReadinessValidator implements ApplicationRunner {
         for (String property : SENSITIVE_PROPERTIES) {
             requireSecret(property, violations);
         }
-        // Third-party passwords (Neon, Upstash) — we don't control their length,
-        // so we only verify they are present and not placeholders.
-        requireConfigured("HELIUM_DB_PASSWORD", violations);
-        requireConfigured("HELIUM_REDIS_PASSWORD", violations);
+        // Third-party passwords (Neon, Upstash) — we don't control their length
+        // or content, so we only verify they are present and non-blank.
+        requireNonBlank("HELIUM_DB_PASSWORD", violations);
+        requireNonBlank("HELIUM_REDIS_PASSWORD", violations);
         requireEnabled("HELIUM_WALLET_CHAIN_MONITOR_ENABLED", violations);
         requireEnabled("HELIUM_WALLET_BUILDER_WORKER_ENABLED", violations);
         requireEnabled("HELIUM_CUSTODY_SIGNING_WORKER_ENABLED", violations);
@@ -71,6 +71,13 @@ public class ProductionReadinessValidator implements ApplicationRunner {
         String value = environment.getProperty(property, "");
         if (value.isBlank() || looksLikePlaceholder(value)) {
             violations.put(property, "must be configured with a production endpoint");
+        }
+    }
+
+    private void requireNonBlank(String property, Map<String, String> violations) {
+        String value = environment.getProperty(property, "");
+        if (value.isBlank()) {
+            violations.put(property, "must be set (third-party credential)");
         }
     }
 
