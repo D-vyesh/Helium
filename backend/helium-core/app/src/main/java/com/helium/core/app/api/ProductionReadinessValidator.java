@@ -20,9 +20,7 @@ public class ProductionReadinessValidator implements ApplicationRunner {
     private static final List<String> SENSITIVE_PROPERTIES = List.of(
         "HELIUM_JWT_SECRET",
         "HELIUM_TOTP_ENCRYPTION_KEY",
-        "HELIUM_API_KEY_PEPPER",
-        "HELIUM_DB_PASSWORD",
-        "HELIUM_REDIS_PASSWORD"
+        "HELIUM_API_KEY_PEPPER"
     );
 
     private final Environment environment;
@@ -37,6 +35,10 @@ public class ProductionReadinessValidator implements ApplicationRunner {
         for (String property : SENSITIVE_PROPERTIES) {
             requireSecret(property, violations);
         }
+        // Third-party passwords (Neon, Upstash) — we don't control their length,
+        // so we only verify they are present and not placeholders.
+        requireConfigured("HELIUM_DB_PASSWORD", violations);
+        requireConfigured("HELIUM_REDIS_PASSWORD", violations);
         requireEnabled("HELIUM_WALLET_CHAIN_MONITOR_ENABLED", violations);
         requireEnabled("HELIUM_WALLET_BUILDER_WORKER_ENABLED", violations);
         requireEnabled("HELIUM_CUSTODY_SIGNING_WORKER_ENABLED", violations);
