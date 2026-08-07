@@ -9,5 +9,5 @@ RUN addgroup -S helium && adduser -S helium -G helium
 COPY --from=build /workspace/app/build/libs/*.jar /app/helium-core.jar
 USER helium
 EXPOSE 8080
-ENV JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:MaxMetaspaceSize=128m -XX:+ExitOnOutOfMemoryError"
+ENV JAVA_OPTS="-Xmx256m -Xms128m -XX:MaxMetaspaceSize=96m -XX:CompressedClassSpaceSize=48m -XX:+UseSerialGC -XX:+ExitOnOutOfMemoryError"
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/helium-core.jar"]
