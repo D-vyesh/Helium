@@ -1,37 +1,38 @@
 package com.helium.core.app.api.email;
 
 import com.helium.core.authuser.application.EmailService;
-import jakarta.mail.MessagingException;
-import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClient;
+import java.util.Map;
 
 /**
- * Production email service backed by Spring's JavaMailSender.
- * Supports MailHog (dev), Gmail SMTP, Amazon SES, and SendGrid SMTP relay.
- * All sends are async to avoid blocking the request thread.
- *
- * Configuration (application.yml / env vars):
- *   spring.mail.host, spring.mail.port, spring.mail.username, spring.mail.password
- *   helium.email.from-address, helium.email.from-name, helium.email.base-url
+ * Production email service backed by Resend HTTP API.
+ * Bypasses Render's strict SMTP port blocking.
  */
 @Service
-public class SmtpEmailService implements EmailService {
+public class ResendEmailService implements EmailService {
 
-    private static final Logger log = LoggerFactory.getLogger(SmtpEmailService.class);
+    private static final Logger log = LoggerFactory.getLogger(ResendEmailService.class);
 
-    private final JavaMailSender mailSender;
     private final EmailProperties props;
     private final EmailTemplates templates;
+    private final RestClient restClient;
+    private final String apiKey;
 
-    public SmtpEmailService(JavaMailSender mailSender, EmailProperties props, EmailTemplates templates) {
-        this.mailSender = mailSender;
+    public ResendEmailService(
+            EmailProperties props, 
+            EmailTemplates templates, 
+            RestClient.Builder restClientBuilder,
+            @Value("${helium.email.resend.api-key:}") String apiKey) {
         this.props = props;
         this.templates = templates;
+        this.apiKey = apiKey;
+        this.restClient = restClientBuilder.baseUrl("https://api.resend.com").build();
     }
 
     @Override
@@ -112,17 +113,33 @@ public class SmtpEmailService implements EmailService {
     }
 
     private void send(String to, String subject, String htmlBody) {
+        if (apiKey == null || apiKey.isBlank()) {
+            log.error("Failed to send email to={} subject={}: Resend API key is missing", to, subject);
+            return;
+        }
+        
         try {
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-            helper.setFrom(props.fromAddress(), props.fromName());
-            helper.setTo(to);
-            helper.setSubject(subject);
-            helper.setText(htmlBody, true);
-            mailSender.send(message);
-            log.debug("Email sent to={} subject={}", to, subject);
-        } catch (MessagingException | java.io.UnsupportedEncodingException e) {
-            log.error("Failed to send email to={} subject={}: {}", to, subject, e.getMessage(), e);
+            // For Resend Free Tier, you must send from onboarding@resend.dev unless you verify a domain.
+            String from = "onboarding@resend.dev";
+
+            Map<String, Object> payload = Map.of(
+                "from", "Helium <" + from + ">",
+                "to", to,
+                "subject", subject,
+                "html", htmlBody
+            );
+
+            restClient.post()
+                .uri("/emails")
+                .header("Authorization", "Bearer " + apiKey)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(payload)
+                .retrieve()
+                .toBodilessEntity();
+
+            log.info("Resend API email sent to={} subject={}", to, subject);
+        } catch (Exception e) {
+            log.error("Failed to send Resend email to={} subject={}: {}", to, subject, e.getMessage(), e);
         }
     }
 }
